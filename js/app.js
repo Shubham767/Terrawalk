@@ -49,19 +49,202 @@ let db = null; // Firebase database reference
 let deferredInstallPrompt = null;
 
 // ===== FIREBASE INIT =====
+let auth = null;
+let confirmationResult = null;
+
 function initFirebase() {
   try {
     if (typeof firebase === 'undefined') {
-      console.warn('Firebase not loaded — running in offline/demo mode');
+      console.warn('Firebase not loaded — demo mode');
       return;
     }
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
+    auth = firebase.auth();
     console.log('✅ Firebase connected');
-    listenToOtherUsers();
+
+    // Listen for auth state — auto-login returning users
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        state.userId = user.uid;
+        loadUserFromFirebase(user.uid);
+      }
+    });
   } catch (e) {
     console.warn('Firebase init failed — demo mode:', e.message);
   }
+}
+
+// ===== PHONE AUTH =====
+function initRecaptcha() {
+  try {
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      size: 'normal',
+      callback: () => { document.getElementById('sendOtpBtn').disabled = false; }
+    });
+    window.recaptchaVerifier.render();
+  } catch(e) { console.warn('reCAPTCHA init failed:', e); }
+}
+
+function sendOTP() {
+  const code = document.getElementById('countryCode').value.trim() || '+91';
+  const num = document.getElementById('phoneInput').value.trim().replace(/\s/g,'');
+  if (num.length < 10) { showNotif('Please enter a valid 10-digit number'); return; }
+
+  const fullNumber = code + num;
+  const btn = document.getElementById('sendOtpBtn');
+  btn.innerHTML = '<span class="loading-spinner"></span>Sending...';
+  btn.disabled = true;
+
+  const appVerifier = window.recaptchaVerifier;
+  auth.signInWithPhoneNumber(fullNumber, appVerifier)
+    .then(result => {
+      confirmationResult = result;
+      document.getElementById('otpSentTo').textContent = fullNumber;
+      showStep('otp');
+      document.getElementById('otp0').focus();
+      showNotif('OTP sent! Check your messages 📱');
+    })
+    .catch(err => {
+      console.error(err);
+      btn.innerHTML = 'SEND OTP →';
+      btn.disabled = false;
+      showNotif('Failed to send OTP: ' + err.message);
+      // Reset recaptcha on error
+      try { window.recaptchaVerifier.reset(); } catch(e) {}
+    });
+}
+
+function verifyOTP() {
+  const otp = [0,1,2,3,4,5].map(i => document.getElementById('otp'+i).value).join('');
+  if (otp.length < 6) { showNotif('Please enter the full 6-digit OTP'); return; }
+
+  const btn = document.getElementById('verifyOtpBtn');
+  btn.innerHTML = '<span class="loading-spinner"></span>Verifying...';
+  btn.disabled = true;
+
+  confirmationResult.confirm(otp)
+    .then(result => {
+      state.userId = result.user.uid;
+      loadUserFromFirebase(result.user.uid);
+    })
+    .catch(err => {
+      btn.innerHTML = 'VERIFY OTP →';
+      btn.disabled = false;
+      showNotif('Wrong OTP. Please try again.');
+    });
+}
+
+function resendOTP() {
+  try { window.recaptchaVerifier.reset(); } catch(e) {}
+  backToPhone();
+  showNotif('Enter your number again to resend OTP');
+}
+
+function backToPhone() {
+  showStep('phone');
+  document.getElementById('sendOtpBtn').innerHTML = 'SEND OTP →';
+  document.getElementById('sendOtpBtn').disabled = false;
+  [0,1,2,3,4,5].forEach(i => document.getElementById('otp'+i).value = '');
+}
+
+function showStep(step) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + step).classList.add('active');
+}
+
+// OTP input helpers
+function otpNext(el, nextIdx) {
+  if (el.value && nextIdx !== null) document.getElementById('otp'+nextIdx).focus();
+  // Auto verify when all 6 filled
+  const otp = [0,1,2,3,4,5].map(i => document.getElementById('otp'+i).value).join('');
+  if (otp.length === 6) verifyOTP();
+}
+
+function otpBack(e, el, prevIdx) {
+  if (e.key === 'Backspace' && !el.value && prevIdx !== null) {
+    document.getElementById('otp'+prevIdx).focus();
+  }
+}
+
+// ===== LOAD USER FROM FIREBASE (returning users) =====
+function loadUserFromFirebase(uid) {
+  if (!db) return;
+  db.ref('users/' + uid).once('value').then(snap => {
+    const data = snap.val();
+    if (data && data.name) {
+      // Returning user — restore their profile & stats
+      state.user = { name: data.name, avatar: data.avatar, color: data.color, city: data.city };
+      state.territory = data.territory || 0;
+      state.steps = data.steps || 0;
+      state.distance = data.distance || 0;
+      state.captures = data.captures || 0;
+      state.health = data.health || 100;
+      state.lastActivity = data.lastActivity || Date.now();
+
+      updateHeaderUI();
+      document.getElementById('loginModal').classList.remove('open');
+
+      // Init map first, then restore territory polygons
+      initMap(/* onReady */ () => {
+        restoreTerritoryFromFirebase(uid);
+        listenToOtherUsers();
+        renderLeaderboards();
+        startDecay();
+        updateStats();
+        checkAchievements();
+      });
+      showNotif('Welcome back, ' + state.user.name + '! Your territory is loading... 🗺️');
+    } else {
+      // New user — show profile setup step
+      showStep('profile');
+    }
+  });
+}
+
+// ===== RESTORE TERRITORY FROM FIREBASE =====
+function restoreTerritoryFromFirebase(uid) {
+  if (!db) return;
+
+  // First try fast snapshot restore
+  db.ref('territory_snapshot/' + uid).once('value').then(snap => {
+    const data = snap.val();
+    if (data && data.geojson) {
+      try {
+        const geojson = JSON.parse(data.geojson);
+        if (!territoryStore[uid]) {
+          territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
+        }
+        territoryStore[uid].geojson = geojson;
+        redrawTerritory(uid);
+        showNotif('Your territory is back! 🟢');
+        return;
+      } catch(e) { console.warn('Snapshot parse error:', e); }
+    }
+
+    // Fallback: rebuild from individual polygons
+    db.ref('territories/' + uid).once('value').then(snap2 => {
+      const polys = snap2.val();
+      if (!polys) return;
+      if (!territoryStore[uid]) {
+        territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
+      }
+      Object.values(polys).forEach(poly => {
+        if (!poly || !poly.path) return;
+        try {
+          const newGeoJSON = pathToGeoJSON(poly.path);
+          if (territoryStore[uid].geojson) {
+            try { territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeoJSON); }
+            catch(e) { console.warn('Union on restore failed:', e); }
+          } else {
+            territoryStore[uid].geojson = newGeoJSON;
+          }
+        } catch(e) { console.warn('Restore polygon error:', e); }
+      });
+      redrawTerritory(uid);
+      showNotif('Your territory is back! 🟢');
+    });
+  });
 }
 
 // ===== FIREBASE: SAVE USER DATA =====
@@ -90,8 +273,22 @@ function saveTerritoryToFirebase(polygon) {
     path: polygon,
     color: state.user.color,
     name: state.user.name,
-    area: calculateArea(polygon),
+    area: Math.floor(turf.area(pathToGeoJSON(polygon))),
     createdAt: Date.now()
+  });
+}
+
+// ===== FIREBASE: SAVE MERGED GEOJSON (full territory snapshot) =====
+function saveMergedTerritoryToFirebase() {
+  if (!db || !state.userId) return;
+  const entry = territoryStore[state.userId];
+  if (!entry || !entry.geojson) return;
+  // Save the final merged GeoJSON as a snapshot for fast restore on login
+  db.ref(`territory_snapshot/${state.userId}`).set({
+    geojson: JSON.stringify(entry.geojson),
+    color: state.user.color,
+    name: state.user.name,
+    updatedAt: Date.now()
   });
 }
 
@@ -163,60 +360,45 @@ function createProfile() {
   const city = CITIES[Math.floor(Math.random() * CITIES.length)];
 
   state.user = { name, avatar, color, city };
-  state.userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
-  // Save to localStorage for persistence
-  localStorage.setItem('tw_user', JSON.stringify({ ...state.user, userId: state.userId, territory: 0, steps: 0, distance: 0, captures: 0, health: 100 }));
-
-  document.getElementById('headerAvatar').innerHTML = avatar;
-  document.getElementById('headerAvatar').style.background = color + '33';
-  document.getElementById('headerAvatar').style.fontSize = '14px';
-  document.getElementById('headerName').textContent = name;
-
-  document.getElementById('profileModal').classList.remove('open');
-  initMap();
-  renderLeaderboards();
-  startDecay();
+  updateHeaderUI();
+  document.getElementById('loginModal').classList.remove('open');
+  initMap(() => {
+    listenToOtherUsers();
+    renderLeaderboards();
+    startDecay();
+    updateStats();
+    checkAchievements();
+  });
   saveUserToFirebase();
-  showNotif(`Welcome ${name}! Walk to claim your ground 🗺️`);
+  showNotif('Welcome ' + name + '! Walk to claim your ground 🗺️');
+}
+
+function updateHeaderUI() {
+  document.getElementById('headerAvatar').innerHTML = state.user.avatar;
+  document.getElementById('headerAvatar').style.background = state.user.color + '33';
+  document.getElementById('headerAvatar').style.fontSize = '14px';
+  document.getElementById('headerName').textContent = state.user.name;
 }
 
 function loadSavedProfile() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('tw_user'));
-    if (!saved || !saved.name) return false;
-    state.user = { name: saved.name, avatar: saved.avatar, color: saved.color, city: saved.city };
-    state.userId = saved.userId;
-    state.territory = saved.territory || 0;
-    state.steps = saved.steps || 0;
-    state.distance = saved.distance || 0;
-    state.captures = saved.captures || 0;
-    state.health = saved.health || 100;
-
-    document.getElementById('headerAvatar').innerHTML = state.user.avatar;
-    document.getElementById('headerAvatar').style.background = state.user.color + '33';
-    document.getElementById('headerAvatar').style.fontSize = '14px';
-    document.getElementById('headerName').textContent = state.user.name;
-    document.getElementById('profileModal').classList.remove('open');
-    return true;
-  } catch { return false; }
+  // Profile is now loaded from Firebase via onAuthStateChanged
+  // This function is kept as no-op for compatibility
+  return false;
 }
 
 function persistState() {
-  if (!state.user) return;
-  localStorage.setItem('tw_user', JSON.stringify({
-    ...state.user,
-    userId: state.userId,
-    territory: state.territory,
-    steps: state.steps,
-    distance: state.distance,
-    captures: state.captures,
-    health: state.health
-  }));
+  // State is persisted to Firebase via saveUserToFirebase()
+  // localStorage used only as fallback for territory GeoJSON
+  if (state.userId && territoryStore[state.userId] && territoryStore[state.userId].geojson) {
+    try {
+      localStorage.setItem('tw_geojson_' + state.userId, JSON.stringify(territoryStore[state.userId].geojson));
+    } catch(e) {}
+  }
 }
 
 // ===== MAP INIT =====
-function initMap() {
+function initMap(onReady) {
   map = L.map('map', { zoomControl: true, attributionControl: false });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
   setTimeout(() => { map.invalidateSize(); }, 300);
@@ -233,6 +415,7 @@ function initMap() {
       placeUserMarker(lat, lng);
       updateGpsStatus('locked', 'GPS Locked ✓');
       addDemoTerritories();
+      if (onReady) onReady();
     },
     () => {
       // Fallback: Delhi
@@ -244,6 +427,7 @@ function initMap() {
       updateGpsStatus('searching', 'GPS unavailable — using Delhi');
       showNotif('📍 Enable location for real GPS tracking');
       addDemoTerritories();
+      if (onReady) onReady();
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
@@ -267,18 +451,25 @@ function placeUserMarker(lat, lng) {
 
 function addDemoTerritories() {
   const demos = [
-    { name: 'Arjun', avatar: '🥬💪', color: '#ff4b6e', offset: [0.003, 0.004], size: 0.002 },
-    { name: 'Priya', avatar: '🦸‍♀️✨', color: '#a855f7', offset: [-0.004, 0.002], size: 0.0015 },
-    { name: 'Karan', avatar: '🔬🧪', color: '#ffd700', offset: [0.002, -0.003], size: 0.0025 },
-    { name: 'Neha', avatar: '👻💚', color: '#f97316', offset: [-0.002, -0.004], size: 0.001 },
+    { name: 'Arjun', avatar: '🥬💪', color: '#ff4b6e', offset: [0.003, 0.004], radius: 200 },
+    { name: 'Priya', avatar: '🦸‍♀️✨', color: '#a855f7', offset: [-0.004, 0.002], radius: 150 },
+    { name: 'Karan', avatar: '🔬🧪', color: '#ffd700', offset: [0.002, -0.003], radius: 250 },
+    { name: 'Neha', avatar: '👻💚', color: '#f97316', offset: [-0.002, -0.004], radius: 100 },
   ];
-  // Register demo players into territory store so capture mechanic works on them
   demos.forEach((u, i) => {
     const lat = state.currentLat + u.offset[0];
     const lng = state.currentLng + u.offset[1];
-    const poly = generatePolygon(lat, lng, u.size, 7);
-    const demoUid = 'demo_' + i;
-    registerRivalTerritory(demoUid, u.name, u.color, poly);
+    // Use turf.circle for clean geometry
+    try {
+      const circle = turf.circle([lng, lat], u.radius / 1000, { steps: 16, units: 'kilometers' });
+      const path = circle.geometry.coordinates[0].map(c => [c[1], c[0]]);
+      const demoUid = 'demo_' + i;
+      registerRivalTerritory(demoUid, u.name, u.color, path);
+    } catch(e) {
+      // Fallback to generated polygon
+      const poly = generatePolygon(lat, lng, 0.002, 8);
+      registerRivalTerritory('demo_' + i, u.name, u.color, poly);
+    }
   });
 }
 
@@ -347,6 +538,7 @@ function stopWalk() {
   checkAchievements();
   persistState();
   saveUserToFirebase();
+  saveMergedTerritoryToFirebase();
   showNotif(`Walk done! +${state.sessionGain} m² claimed 🎉`);
 }
 
@@ -388,55 +580,47 @@ function addWalkPoint(lat, lng) {
 }
 
 // ===== TERRITORY STORE =====
-// Each entry: { uid, name, color, paths: [[lat,lng],...], layer }
+// Each entry: { uid, name, color, geojson: GeoJSON Feature (Polygon/MultiPolygon), layer }
 let territoryStore = {};
 
-// ===== POLYGON HELPERS =====
+// ===== TURF HELPERS =====
 
-// Check if point [lat,lng] is inside a polygon path
-function pointInPolygon(point, path) {
-  let inside = false;
-  const x = point[0], y = point[1];
-  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
-    const xi = path[i][0], yi = path[i][1];
-    const xj = path[j][0], yj = path[j][1];
-    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-    if (intersect) inside = !inside;
+// Convert [[lat,lng],...] path to GeoJSON polygon (Turf uses [lng,lat])
+function pathToGeoJSON(path) {
+  const coords = path.map(p => [p[1], p[0]]);
+  // Close the ring
+  if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1]) {
+    coords.push(coords[0]);
   }
-  return inside;
+  return turf.polygon([coords]);
 }
 
-// Check if two polygon paths overlap (any vertex of A inside B or vice versa)
-function polygonsOverlap(pathA, pathB) {
-  for (const pt of pathA) { if (pointInPolygon(pt, pathB)) return true; }
-  for (const pt of pathB) { if (pointInPolygon(pt, pathA)) return true; }
-  return false;
+// Convert GeoJSON polygon coords back to [[lat,lng],...] for Leaflet
+function geojsonToLeaflet(geojson) {
+  const type = geojson.geometry.type;
+  if (type === 'Polygon') {
+    return [geojson.geometry.coordinates[0].map(c => [c[1], c[0]])];
+  } else if (type === 'MultiPolygon') {
+    return geojson.geometry.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
+  }
+  return [];
 }
 
-// Compute approximate overlap area between two paths
-function overlapArea(pathA, pathB) {
-  const areaA = calculateArea(pathA);
-  const areaB = calculateArea(pathB);
-  // Estimate overlap as proportion of vertices inside
-  let countA = pathA.filter(pt => pointInPolygon(pt, pathB)).length;
-  let countB = pathB.filter(pt => pointInPolygon(pt, pathA)).length;
-  const ratioA = countA / pathA.length;
-  const ratioB = countB / pathB.length;
-  return Math.floor(Math.min(areaA * ratioA, areaB * ratioB) * 0.8);
-}
-
-// Redraw all territories for a given uid from their stored paths
+// Redraw territory for a uid from their stored GeoJSON
 function redrawTerritory(uid) {
   const entry = territoryStore[uid];
   if (!entry) return;
   if (entry.layer) { map.removeLayer(entry.layer); entry.layer = null; }
-  if (entry.paths.length === 0) return;
-  const layers = entry.paths.map(path =>
+  if (!entry.geojson) return;
+
+  const isMe = uid === state.userId;
+  const paths = geojsonToLeaflet(entry.geojson);
+  const layers = paths.map(path =>
     L.polygon(path, {
       color: entry.color,
       fillColor: entry.color,
-      fillOpacity: uid === state.userId ? 0.4 : 0.25,
-      weight: uid === state.userId ? 2.5 : 1.5,
+      fillOpacity: isMe ? 0.4 : 0.25,
+      weight: isMe ? 2.5 : 1.5,
       smoothFactor: 1
     })
   );
@@ -448,62 +632,71 @@ function closeTerritory() {
   if (state.walkPath.length < 3) return;
 
   const newPath = [...state.walkPath];
-  const newArea = calculateArea(newPath);
   const uid = state.userId;
+  let newGeoJSON;
+
+  try { newGeoJSON = pathToGeoJSON(newPath); }
+  catch(e) { console.warn('Invalid polygon', e); return; }
+
+  const newArea = calculateArea(newPath);
 
   // Init user entry if first territory
   if (!territoryStore[uid]) {
-    territoryStore[uid] = {
-      uid, name: state.user.name,
-      color: state.user.color,
-      paths: [], layer: null
-    };
+    territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
   }
 
-  // ---- CAPTURE: check overlap with every other player ----
-  let totalCaptured = 0;
+  // ---- CAPTURE: subtract overlap from each rival ----
   Object.keys(territoryStore).forEach(rivalUid => {
     if (rivalUid === uid) return;
     const rival = territoryStore[rivalUid];
-    const survivingPaths = [];
+    if (!rival.geojson) return;
 
-    rival.paths.forEach(rivalPath => {
-      if (polygonsOverlap(newPath, rivalPath)) {
-        // Calculate captured area
-        const captured = overlapArea(newPath, rivalPath);
-        totalCaptured += captured;
-        state.territory += captured;
-        state.sessionGain += captured;
+    try {
+      const intersection = turf.intersect(newGeoJSON, rival.geojson);
+      if (!intersection) return; // no overlap
 
-        // Remove overlapping portion from rival
-        // (Simplified: remove the entire overlapping polygon from rival)
-        // In a full implementation this would clip the polygon geometry
-        rival.paths = rival.paths.filter(p => p !== rivalPath);
-        redrawTerritory(rivalUid);
+      // Calculate captured area in m²
+      const capturedM2 = Math.floor(turf.area(intersection));
+      if (capturedM2 < 1) return;
 
-        showNotif(`⚔️ Captured ${rival.name}'s territory! +${captured} m²`);
-      } else {
-        survivingPaths.push(rivalPath);
-      }
-    });
-    rival.paths = survivingPaths;
+      // Subtract captured area from rival
+      const remaining = turf.difference(rival.geojson, newGeoJSON);
+      rival.geojson = remaining; // null if fully consumed
+      redrawTerritory(rivalUid);
+
+      // Add captured area to user's stats
+      state.territory += capturedM2;
+      state.sessionGain += capturedM2;
+      state.captures++;
+
+      showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
+    } catch(e) { console.warn('Capture error:', e); }
   });
 
-  // ---- MERGE: add new path to user's territory ----
-  territoryStore[uid].paths.push(newPath);
-  state.territory += newArea;
-  state.sessionGain += newArea;
-  state.captures++;
-
-  // Redraw user's merged territory
-  redrawTerritory(uid);
-
-  // Persist paths to localStorage
+  // ---- MERGE: union new polygon into user's existing territory ----
   try {
-    localStorage.setItem('tw_polygons_' + uid, JSON.stringify(territoryStore[uid].paths));
-  } catch(e) {}
+    if (territoryStore[uid].geojson) {
+      const merged = turf.union(territoryStore[uid].geojson, newGeoJSON);
+      territoryStore[uid].geojson = merged;
+    } else {
+      territoryStore[uid].geojson = newGeoJSON;
+    }
+  } catch(e) {
+    // Fallback: just set as new polygon if union fails
+    territoryStore[uid].geojson = newGeoJSON;
+    console.warn('Union error:', e);
+  }
 
+  // Add new walk area to stats
+  const realArea = Math.floor(turf.area(newGeoJSON));
+  state.territory += realArea;
+  state.sessionGain += realArea;
+
+  redrawTerritory(uid);
+  persistTerritoryStore(uid);
   saveTerritoryToFirebase(newPath);
+  saveMergedTerritoryToFirebase();
+
   if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
 
   const flash = document.getElementById('captureFlash');
@@ -514,28 +707,87 @@ function closeTerritory() {
   updateStats();
 }
 
-// Restore user's saved territory polygons on reload
-function restoreTerritoryFromStorage() {
+// Persist territory GeoJSON to localStorage
+function persistTerritoryStore(uid) {
   try {
-    const uid = state.userId;
-    const saved = JSON.parse(localStorage.getItem('tw_polygons_' + uid));
-    if (!saved || !Array.isArray(saved) || saved.length === 0) return;
-    if (!territoryStore[uid]) {
-      territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, paths: [], layer: null };
+    const entry = territoryStore[uid];
+    if (entry && entry.geojson) {
+      localStorage.setItem('tw_geojson_' + uid, JSON.stringify(entry.geojson));
     }
-    territoryStore[uid].paths = saved;
+  } catch(e) {}
+}
+
+// Restore saved territory — from Firebase first, fallback to localStorage
+function restoreTerritoryFromStorage() {
+  const uid = state.userId;
+  if (!uid) return;
+
+  // Try Firebase first (works across devices)
+  if (db) {
+    db.ref('territories/' + uid).once('value').then(snap => {
+      const data = snap.val();
+      if (!data) { restoreTerritoryFromLocal(uid); return; }
+
+      if (!territoryStore[uid]) {
+        territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
+      }
+
+      // Merge all saved polygons back into one GeoJSON
+      Object.values(data).forEach(poly => {
+        if (!poly || !poly.path) return;
+        try {
+          const newGeo = pathToGeoJSON(poly.path);
+          if (territoryStore[uid].geojson) {
+            territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeo);
+          } else {
+            territoryStore[uid].geojson = newGeo;
+          }
+        } catch(e) {}
+      });
+
+      if (territoryStore[uid].geojson) {
+        // Update territory area from restored GeoJSON
+        state.territory = Math.floor(turf.area(territoryStore[uid].geojson));
+        redrawTerritory(uid);
+        updateStats();
+        showNotif('Territory restored! 🗺️');
+      }
+    }).catch(() => restoreTerritoryFromLocal(uid));
+  } else {
+    restoreTerritoryFromLocal(uid);
+  }
+}
+
+// Fallback: restore from localStorage
+function restoreTerritoryFromLocal(uid) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('tw_geojson_' + uid));
+    if (!saved) return;
+    if (!territoryStore[uid]) {
+      territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
+    }
+    territoryStore[uid].geojson = saved;
+    state.territory = Math.floor(turf.area(saved));
     redrawTerritory(uid);
+    updateStats();
   } catch(e) { console.warn('Could not restore territory:', e); }
 }
 
 // Register a rival's territory into the store (called from Firebase listener)
 function registerRivalTerritory(uid, name, color, path) {
   if (uid === state.userId) return;
-  if (!territoryStore[uid]) {
-    territoryStore[uid] = { uid, name, color, paths: [], layer: null };
-  }
-  territoryStore[uid].paths.push(path);
-  redrawTerritory(uid);
+  try {
+    const newGeoJSON = pathToGeoJSON(path);
+    if (!territoryStore[uid]) {
+      territoryStore[uid] = { uid, name, color, geojson: null, layer: null };
+    }
+    if (territoryStore[uid].geojson) {
+      territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeoJSON);
+    } else {
+      territoryStore[uid].geojson = newGeoJSON;
+    }
+    redrawTerritory(uid);
+  } catch(e) { console.warn('Register rival error:', e); }
 }
 
 function calculateArea(path) {
@@ -703,15 +955,8 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('DOMContentLoaded', () => {
   buildProfileModal();
   initFirebase();
-
-  const hasProfile = loadSavedProfile();
-  if (hasProfile) {
-    initMap();
-    renderLeaderboards();
-    startDecay();
-    updateStats();
-    checkAchievements();
-  }
+  // reCAPTCHA init happens after Firebase is ready
+  setTimeout(initRecaptcha, 500);
 });
 
 // ===== DEMO MODE =====
