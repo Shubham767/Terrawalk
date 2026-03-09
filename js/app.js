@@ -89,6 +89,7 @@ function saveTerritoryToFirebase(polygon) {
   db.ref(`territories/${state.userId}/${polyId}`).set({
     path: polygon,
     color: state.user.color,
+    name: state.user.name,
     area: calculateArea(polygon),
     createdAt: Date.now()
   });
@@ -102,13 +103,8 @@ function listenToOtherUsers() {
     Object.entries(allTerritories).forEach(([uid, polygons]) => {
       if (uid === state.userId) return; // skip self
       Object.values(polygons).forEach(poly => {
-        if (poly && poly.path && poly.color) {
-          L.polygon(poly.path, {
-            color: poly.color,
-            fillColor: poly.color,
-            fillOpacity: 0.25,
-            weight: 2
-          }).addTo(map);
+        if (poly && poly.path && poly.color && poly.name) {
+          registerRivalTerritory(uid, poly.name, poly.color, poly.path);
         }
       });
     });
@@ -276,15 +272,14 @@ function addDemoTerritories() {
     { name: 'Karan', avatar: '🔬🧪', color: '#ffd700', offset: [0.002, -0.003], size: 0.0025 },
     { name: 'Neha', avatar: '👻💚', color: '#f97316', offset: [-0.002, -0.004], size: 0.001 },
   ];
-  if (!db) { // Only show demo territories when Firebase is not connected
-    demos.forEach(u => {
-      const lat = state.currentLat + u.offset[0];
-      const lng = state.currentLng + u.offset[1];
-      const poly = generatePolygon(lat, lng, u.size, 7);
-      L.polygon(poly, { color: u.color, fillColor: u.color, fillOpacity: 0.25, weight: 2 })
-        .bindTooltip(`${u.avatar} ${u.name}`, { permanent: false }).addTo(map);
-    });
-  }
+  // Register demo players into territory store so capture mechanic works on them
+  demos.forEach((u, i) => {
+    const lat = state.currentLat + u.offset[0];
+    const lng = state.currentLng + u.offset[1];
+    const poly = generatePolygon(lat, lng, u.size, 7);
+    const demoUid = 'demo_' + i;
+    registerRivalTerritory(demoUid, u.name, u.color, poly);
+  });
 }
 
 function generatePolygon(cLat, cLng, size, pts) {
@@ -392,18 +387,123 @@ function addWalkPoint(lat, lng) {
   }).addTo(map);
 }
 
+// ===== TERRITORY STORE =====
+// Each entry: { uid, name, color, paths: [[lat,lng],...], layer }
+let territoryStore = {};
+
+// ===== POLYGON HELPERS =====
+
+// Check if point [lat,lng] is inside a polygon path
+function pointInPolygon(point, path) {
+  let inside = false;
+  const x = point[0], y = point[1];
+  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+    const xi = path[i][0], yi = path[i][1];
+    const xj = path[j][0], yj = path[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// Check if two polygon paths overlap (any vertex of A inside B or vice versa)
+function polygonsOverlap(pathA, pathB) {
+  for (const pt of pathA) { if (pointInPolygon(pt, pathB)) return true; }
+  for (const pt of pathB) { if (pointInPolygon(pt, pathA)) return true; }
+  return false;
+}
+
+// Compute approximate overlap area between two paths
+function overlapArea(pathA, pathB) {
+  const areaA = calculateArea(pathA);
+  const areaB = calculateArea(pathB);
+  // Estimate overlap as proportion of vertices inside
+  let countA = pathA.filter(pt => pointInPolygon(pt, pathB)).length;
+  let countB = pathB.filter(pt => pointInPolygon(pt, pathA)).length;
+  const ratioA = countA / pathA.length;
+  const ratioB = countB / pathB.length;
+  return Math.floor(Math.min(areaA * ratioA, areaB * ratioB) * 0.8);
+}
+
+// Redraw all territories for a given uid from their stored paths
+function redrawTerritory(uid) {
+  const entry = territoryStore[uid];
+  if (!entry) return;
+  if (entry.layer) { map.removeLayer(entry.layer); entry.layer = null; }
+  if (entry.paths.length === 0) return;
+  const layers = entry.paths.map(path =>
+    L.polygon(path, {
+      color: entry.color,
+      fillColor: entry.color,
+      fillOpacity: uid === state.userId ? 0.4 : 0.25,
+      weight: uid === state.userId ? 2.5 : 1.5,
+      smoothFactor: 1
+    })
+  );
+  entry.layer = L.layerGroup(layers).addTo(map);
+}
+
+// ===== CLOSE TERRITORY (merge + capture) =====
 function closeTerritory() {
   if (state.walkPath.length < 3) return;
-  const area = calculateArea(state.walkPath);
-  state.territory += area;
-  state.sessionGain += area;
+
+  const newPath = [...state.walkPath];
+  const newArea = calculateArea(newPath);
+  const uid = state.userId;
+
+  // Init user entry if first territory
+  if (!territoryStore[uid]) {
+    territoryStore[uid] = {
+      uid, name: state.user.name,
+      color: state.user.color,
+      paths: [], layer: null
+    };
+  }
+
+  // ---- CAPTURE: check overlap with every other player ----
+  let totalCaptured = 0;
+  Object.keys(territoryStore).forEach(rivalUid => {
+    if (rivalUid === uid) return;
+    const rival = territoryStore[rivalUid];
+    const survivingPaths = [];
+
+    rival.paths.forEach(rivalPath => {
+      if (polygonsOverlap(newPath, rivalPath)) {
+        // Calculate captured area
+        const captured = overlapArea(newPath, rivalPath);
+        totalCaptured += captured;
+        state.territory += captured;
+        state.sessionGain += captured;
+
+        // Remove overlapping portion from rival
+        // (Simplified: remove the entire overlapping polygon from rival)
+        // In a full implementation this would clip the polygon geometry
+        rival.paths = rival.paths.filter(p => p !== rivalPath);
+        redrawTerritory(rivalUid);
+
+        showNotif(`⚔️ Captured ${rival.name}'s territory! +${captured} m²`);
+      } else {
+        survivingPaths.push(rivalPath);
+      }
+    });
+    rival.paths = survivingPaths;
+  });
+
+  // ---- MERGE: add new path to user's territory ----
+  territoryStore[uid].paths.push(newPath);
+  state.territory += newArea;
+  state.sessionGain += newArea;
   state.captures++;
 
-  L.polygon(state.walkPath, {
-    color: state.user.color, fillColor: state.user.color, fillOpacity: 0.3, weight: 2
-  }).addTo(map);
+  // Redraw user's merged territory
+  redrawTerritory(uid);
 
-  saveTerritoryToFirebase([...state.walkPath]);
+  // Persist paths to localStorage
+  try {
+    localStorage.setItem('tw_polygons_' + uid, JSON.stringify(territoryStore[uid].paths));
+  } catch(e) {}
+
+  saveTerritoryToFirebase(newPath);
   if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
 
   const flash = document.getElementById('captureFlash');
@@ -412,9 +512,30 @@ function closeTerritory() {
 
   document.getElementById('hudTerritory').textContent = `+${state.sessionGain} m²`;
   updateStats();
+}
 
-  const rivals = ['Arjun','Priya','Karan','Neha'];
-  if (Math.random() < 0.3) showNotif(`⚔️ Captured ${rivals[Math.floor(Math.random()*rivals.length)]}'s territory!`);
+// Restore user's saved territory polygons on reload
+function restoreTerritoryFromStorage() {
+  try {
+    const uid = state.userId;
+    const saved = JSON.parse(localStorage.getItem('tw_polygons_' + uid));
+    if (!saved || !Array.isArray(saved) || saved.length === 0) return;
+    if (!territoryStore[uid]) {
+      territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, paths: [], layer: null };
+    }
+    territoryStore[uid].paths = saved;
+    redrawTerritory(uid);
+  } catch(e) { console.warn('Could not restore territory:', e); }
+}
+
+// Register a rival's territory into the store (called from Firebase listener)
+function registerRivalTerritory(uid, name, color, path) {
+  if (uid === state.userId) return;
+  if (!territoryStore[uid]) {
+    territoryStore[uid] = { uid, name, color, paths: [], layer: null };
+  }
+  territoryStore[uid].paths.push(path);
+  redrawTerritory(uid);
 }
 
 function calculateArea(path) {
