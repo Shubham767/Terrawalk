@@ -223,6 +223,7 @@ function persistState() {
 function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: false });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+  setTimeout(() => { map.invalidateSize(); }, 300);
 
   updateGpsStatus('searching', 'Searching for GPS signal...');
 
