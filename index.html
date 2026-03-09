@@ -18,29 +18,88 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="/css/style.css">
 
+<!-- Turf.js for polygon geometry (union, difference, intersection) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
 <!-- Firebase (Realtime Database) -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<style>
+  .step { display: none; flex-direction: column; gap: 18px; }
+  .step.active { display: flex; }
+  .phone-input-wrap { display: flex; gap: 8px; align-items: stretch; }
+  .country-code { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font-body); font-size: 15px; width: 80px; outline: none; text-align: center; flex-shrink: 0; }
+  .otp-inputs { display: flex; gap: 8px; justify-content: center; }
+  .otp-digit { width: 44px; height: 54px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: var(--font-mono); font-size: 22px; text-align: center; outline: none; transition: border-color 0.2s; }
+  .otp-digit:focus { border-color: var(--accent); }
+  .modal-subtitle { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .modal-subtitle span { color: var(--accent); font-weight: 600; }
+  .resend-link { text-align: center; font-size: 12px; color: var(--text-dim); cursor: pointer; text-decoration: underline; }
+  .resend-link:hover { color: var(--accent); }
+  .btn-secondary { background: transparent; color: var(--text-dim); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; width: 100%; }
+  .loading-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #recaptcha-container { display: flex; justify-content: center; min-height: 78px; }
+</style>
 </head>
 <body>
 
-<!-- PROFILE MODAL -->
-<div class="modal-overlay open" id="profileModal">
+<!-- ===== LOGIN MODAL ===== -->
+<div class="modal-overlay open" id="loginModal">
   <div class="modal">
-    <div class="modal-title">JOIN TERRAWALK</div>
-    <div>
-      <div class="modal-label">Your Warrior Name</div>
-      <input type="text" id="usernameInput" placeholder="Enter your name..." maxlength="20"/>
+    <div class="modal-title">TERRAWALK</div>
+
+    <!-- STEP 1: Phone Number -->
+    <div class="step active" id="step-phone">
+      <div class="modal-subtitle">Enter your mobile number to join the battle 🗺️</div>
+      <div>
+        <div class="modal-label">Mobile Number</div>
+        <div class="phone-input-wrap">
+          <input type="tel" class="country-code" id="countryCode" value="+91" maxlength="4"/>
+          <input type="tel" id="phoneInput" placeholder="98765 43210" maxlength="10" style="flex:1" onkeydown="if(event.key==='Enter') sendOTP()"/>
+        </div>
+      </div>
+      <div id="recaptcha-container"></div>
+      <button class="btn-primary" id="sendOtpBtn" onclick="sendOTP()">SEND OTP →</button>
     </div>
-    <div>
-      <div class="modal-label">Choose Your Avatar</div>
-      <div class="avatar-picker" id="avatarPicker"></div>
+
+    <!-- STEP 2: OTP Verification -->
+    <div class="step" id="step-otp">
+      <div class="modal-subtitle">OTP sent to <span id="otpSentTo"></span></div>
+      <div>
+        <div class="modal-label">Enter 6-digit OTP</div>
+        <div class="otp-inputs">
+          <input class="otp-digit" maxlength="1" type="tel" id="otp0" oninput="otpNext(this,1)" onkeydown="otpBack(event,this,null)"/>
+          <input class="otp-digit" maxlength="1" type="tel" id="otp1" oninput="otpNext(this,2)" onkeydown="otpBack(event,this,0)"/>
+          <input class="otp-digit" maxlength="1" type="tel" id="otp2" oninput="otpNext(this,3)" onkeydown="otpBack(event,this,1)"/>
+          <input class="otp-digit" maxlength="1" type="tel" id="otp3" oninput="otpNext(this,4)" onkeydown="otpBack(event,this,2)"/>
+          <input class="otp-digit" maxlength="1" type="tel" id="otp4" oninput="otpNext(this,5)" onkeydown="otpBack(event,this,3)"/>
+          <input class="otp-digit" maxlength="1" type="tel" id="otp5" oninput="otpNext(this,null)" onkeydown="otpBack(event,this,4)"/>
+        </div>
+      </div>
+      <button class="btn-primary" id="verifyOtpBtn" onclick="verifyOTP()">VERIFY OTP →</button>
+      <div class="resend-link" onclick="resendOTP()">Resend OTP</div>
+      <button class="btn-secondary" onclick="backToPhone()">← Change Number</button>
     </div>
-    <div>
-      <div class="modal-label">Territory Color</div>
-      <div class="color-picker" id="colorPicker"></div>
+
+    <!-- STEP 3: Profile Setup (new users only) -->
+    <div class="step" id="step-profile">
+      <div class="modal-subtitle">You're in! Create your warrior identity 💪</div>
+      <div>
+        <div class="modal-label">Your Warrior Name</div>
+        <input type="text" id="usernameInput" placeholder="Enter your name..." maxlength="20"/>
+      </div>
+      <div>
+        <div class="modal-label">Choose Your Avatar</div>
+        <div class="avatar-picker" id="avatarPicker"></div>
+      </div>
+      <div>
+        <div class="modal-label">Territory Color</div>
+        <div class="color-picker" id="colorPicker"></div>
+      </div>
+      <button class="btn-primary" onclick="createProfile()">CLAIM YOUR GROUND →</button>
     </div>
-    <button class="btn-primary" onclick="createProfile()">CLAIM YOUR GROUND →</button>
   </div>
 </div>
 
