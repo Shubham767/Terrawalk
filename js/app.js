@@ -591,3 +591,65 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAchievements();
   }
 });
+
+// ===== DEMO MODE =====
+function startDemo() {
+  if (!state.user) { showNotif('Please create your profile first!'); return; }
+  if (!map) { showNotif('Map still loading, try again!'); return; }
+
+  showNotif('🎮 Demo Mode — watch your territory appear!');
+
+  const center = map.getCenter();
+  state.currentLat = center.lat;
+  state.currentLng = center.lng;
+  state.walking = true;
+  state.walkPath = [];
+  state.sessionGain = 0;
+
+  document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
+  document.getElementById('walkBtn').classList.add('active');
+  document.getElementById('walkingHud').classList.add('visible');
+  document.getElementById('statusBadge').textContent = '🎮 DEMO';
+  document.getElementById('demoBtn').style.display = 'none';
+
+  const lat = state.currentLat;
+  const lng = state.currentLng;
+  const radius = 0.0012;
+  const totalSteps = 36;
+  let currentStep = 0;
+
+  addWalkPoint(lat + radius, lng);
+  placeUserMarker(lat + radius, lng);
+
+  walkInterval = setInterval(() => {
+    if (!state.walking) { clearInterval(walkInterval); return; }
+    currentStep++;
+    const angle = (currentStep / totalSteps) * 2 * Math.PI;
+    const newLat = lat + radius * Math.cos(angle);
+    const newLng = lng + radius * Math.sin(angle);
+    addWalkPoint(newLat, newLng);
+    placeUserMarker(newLat, newLng);
+    map.panTo([newLat, newLng]);
+    state.steps += Math.floor(Math.random() * 8) + 15;
+    state.distance += 0.023;
+    updateStats();
+
+    if (currentStep >= totalSteps) {
+      clearInterval(walkInterval);
+      setTimeout(() => {
+        closeTerritory();
+        state.walking = false;
+        document.getElementById('walkBtn').textContent = '▶ START WALK';
+        document.getElementById('walkBtn').classList.remove('active');
+        document.getElementById('walkingHud').classList.remove('visible');
+        document.getElementById('statusBadge').textContent = '🟢 READY';
+        document.getElementById('demoBtn').style.display = 'block';
+        updateStats();
+        checkAchievements();
+        persistState();
+        saveUserToFirebase();
+        showNotif('🎉 Territory claimed! +' + state.sessionGain + ' m²');
+      }, 500);
+    }
+  }, 300);
+}
