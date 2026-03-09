@@ -7,13 +7,14 @@
 // 🔴 REPLACE THESE VALUES with your own from Firebase Console
 // Go to: console.firebase.google.com → Your Project → Project Settings → Your Apps → SDK Setup
 const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCrIxtCxP6eJqPmb0BdguiQTtYzvbY2jrE",
+  authDomain: "terrawalk-bc09a.firebaseapp.com",
+  databaseURL: "https://terrawalk-bc09a-default-rtdb.firebaseio.com",
+  projectId: "terrawalk-bc09a",
+  storageBucket: "terrawalk-bc09a.firebasestorage.app",
+  messagingSenderId: "184264530167",
+  appId: "1:184264530167:web:fe431b558530bbd0c79bf2",
+  measurementId: "G-FD91RY4Q1M"
 };
 
 // ===== CONSTANTS =====
