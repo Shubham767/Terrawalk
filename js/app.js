@@ -385,32 +385,42 @@ function updateGpsStatus(status, text) {
 }
 
 function placeUserMarker(lat, lng) {
+  const name = state.user ? state.user.name : 'You';
   const icon = L.divIcon({
-    html: `<div style="width:40px;height:40px;border-radius:50%;background:${state.user.color};border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 20px ${state.user.color};line-height:1">${state.user.avatar}</div>`,
-    iconSize: [40, 40], className: ''
+    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      <div style="width:40px;height:40px;border-radius:50%;background:${state.user.color};border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 20px ${state.user.color};line-height:1">${state.user.avatar}</div>
+      <div style="background:rgba(0,0,0,0.75);color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;letter-spacing:0.5px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${name}</div>
+    </div>`,
+    iconSize: [80, 56], iconAnchor: [40, 20], className: ''
   });
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
 }
 
 function addDemoTerritories() {
+  // Clear any existing demo territories first (fresh start every time)
+  ['demo_0','demo_1','demo_2','demo_3'].forEach(demoUid => {
+    if (territoryStore[demoUid]) {
+      if (territoryStore[demoUid].layer) map.removeLayer(territoryStore[demoUid].layer);
+      delete territoryStore[demoUid];
+    }
+  });
+
   const demos = [
     { name: 'Arjun', avatar: '🥬💪', color: '#ff4b6e', offset: [0.003, 0.004], radius: 200 },
     { name: 'Priya', avatar: '🦸‍♀️✨', color: '#a855f7', offset: [-0.004, 0.002], radius: 150 },
     { name: 'Karan', avatar: '🔬🧪', color: '#ffd700', offset: [0.002, -0.003], radius: 250 },
     { name: 'Neha', avatar: '👻💚', color: '#f97316', offset: [-0.002, -0.004], radius: 100 },
   ];
+
   demos.forEach((u, i) => {
     const lat = state.currentLat + u.offset[0];
     const lng = state.currentLng + u.offset[1];
-    // Use turf.circle for clean geometry
     try {
       const circle = turf.circle([lng, lat], u.radius / 1000, { steps: 16, units: 'kilometers' });
       const path = circle.geometry.coordinates[0].map(c => [c[1], c[0]]);
-      const demoUid = 'demo_' + i;
-      registerRivalTerritory(demoUid, u.name, u.color, path);
+      registerRivalTerritory('demo_' + i, u.name, u.color, path);
     } catch(e) {
-      // Fallback to generated polygon
       const poly = generatePolygon(lat, lng, 0.002, 8);
       registerRivalTerritory('demo_' + i, u.name, u.color, poly);
     }
@@ -573,15 +583,38 @@ function redrawTerritory(uid) {
   const paths = geojsonToLeaflet(entry.geojson);
   if (!paths.length) return;
 
-  const layers = paths.map(path =>
-    L.polygon(path, {
+  // Calculate TOTAL area across all polygons (sum of entire territory)
+  const totalAreaM2 = Math.floor(turf.area(entry.geojson));
+  const areaLabel = totalAreaM2 >= 1000
+    ? (totalAreaM2 / 1000).toFixed(1) + ' km²'
+    : totalAreaM2 + ' m²';
+
+  const layers = paths.map((path, idx) => {
+    const poly = L.polygon(path, {
       color: entry.color,
       fillColor: entry.color,
       fillOpacity: isMe ? 0.45 : 0.25,
       weight: isMe ? 3 : 1.5,
       smoothFactor: 1
-    })
-  );
+    });
+
+    // Show name + total area label only on the first polygon
+    if (idx === 0) {
+      const center = poly.getBounds().getCenter();
+      const label = L.divIcon({
+        html: `<div style="background:rgba(0,0,0,0.7);color:white;padding:3px 7px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.4;border:1px solid ${entry.color}">
+          <div style="color:${entry.color}">${entry.name}</div>
+          <div>${areaLabel}</div>
+        </div>`,
+        className: '',
+        iconAnchor: [40, 16]
+      });
+      const labelMarker = L.marker(center, { icon: label, interactive: false }).addTo(map);
+      layers.push(labelMarker); // add to layer group so it gets cleaned up with the polygon
+    }
+    return poly;
+  });
+
   entry.layer = L.layerGroup(layers).addTo(map);
 }
 
