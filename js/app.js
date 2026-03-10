@@ -60,74 +60,58 @@ function initFirebase() {
     }
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
-    auth = firebase.auth();
     console.log('✅ Firebase connected');
-
-    // Listen for auth state — auto-login returning users
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        state.userId = user.uid;
-        loadUserFromFirebase(user.uid);
-      }
-    });
+    // Auth is handled via Twilio OTP — no Firebase Auth needed
   } catch (e) {
     console.warn('Firebase init failed — demo mode:', e.message);
   }
 }
 
-// ===== PHONE AUTH =====
-function initRecaptcha() {
-  try {
-    // Use invisible reCAPTCHA — no checkbox, works on mobile browsers
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendOtpBtn', {
-      size: 'invisible',
-      callback: () => { /* auto-proceeds */ }
-    });
-  } catch(e) { console.warn('reCAPTCHA init failed:', e); }
-}
+// ===== PHONE AUTH via Twilio Serverless =====
+let currentPhone = '';
 
-function sendOTP() {
+function initRecaptcha() { /* not needed with Twilio */ }
+
+async function sendOTP() {
   const code = document.getElementById('countryCode').value.trim() || '+91';
   const num = document.getElementById('phoneInput').value.trim().replace(/\s/g,'');
   if (num.length < 10) { showNotif('Please enter a valid 10-digit number'); return; }
 
-  const fullNumber = code + num;
+  currentPhone = code + num;
   const btn = document.getElementById('sendOtpBtn');
   btn.innerHTML = '<span class="loading-spinner"></span>Sending...';
   btn.disabled = true;
 
-  const appVerifier = window.recaptchaVerifier;
-  auth.signInWithPhoneNumber(fullNumber, appVerifier)
-    .then(result => {
-      confirmationResult = result;
-      document.getElementById('otpSentTo').textContent = fullNumber;
+  try {
+    const res = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: currentPhone })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      document.getElementById('otpSentTo').textContent = currentPhone;
       showStep('otp');
       document.getElementById('otp0').focus();
       showNotif('OTP sent! Check your messages 📱');
-    })
-    .catch(err => {
-      console.error(err);
+    } else if (data.error === 'UNVERIFIED_NUMBER') {
+      showNotif('⚠️ Please verify this number in your Twilio dashboard first');
       btn.innerHTML = 'SEND OTP →';
       btn.disabled = false;
-
-      // Destroy and recreate recaptcha on error to prevent loop
-      try {
-        window.recaptchaVerifier.clear();
-        window.recaptchaVerifier = null;
-      } catch(e) {}
-      setTimeout(initRecaptcha, 500);
-
-      if (err.code === 'auth/invalid-phone-number') {
-        showNotif('Invalid number. Use format: +91XXXXXXXXXX');
-      } else if (err.code === 'auth/too-many-requests') {
-        showNotif('Too many attempts. Please try after some time.');
-      } else {
-        showNotif('Could not send OTP. Check your number and try again.');
-      }
-    });
+    } else {
+      showNotif(data.message || 'Could not send OTP. Try again.');
+      btn.innerHTML = 'SEND OTP →';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    showNotif('Network error. Please try again.');
+    btn.innerHTML = 'SEND OTP →';
+    btn.disabled = false;
+  }
 }
 
-function verifyOTP() {
+async function verifyOTP() {
   const otp = [0,1,2,3,4,5].map(i => document.getElementById('otp'+i).value).join('');
   if (otp.length < 6) { showNotif('Please enter the full 6-digit OTP'); return; }
 
@@ -135,20 +119,32 @@ function verifyOTP() {
   btn.innerHTML = '<span class="loading-spinner"></span>Verifying...';
   btn.disabled = true;
 
-  confirmationResult.confirm(otp)
-    .then(result => {
-      state.userId = result.user.uid;
-      loadUserFromFirebase(result.user.uid);
-    })
-    .catch(err => {
+  try {
+    const res = await fetch('/api/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: currentPhone, otp })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      // Use phone number as unique user ID (hashed for privacy)
+      const uid = 'ph_' + btoa(currentPhone).replace(/[^a-zA-Z0-9]/g,'');
+      state.userId = uid;
+      loadUserFromFirebase(uid);
+    } else {
       btn.innerHTML = 'VERIFY OTP →';
       btn.disabled = false;
-      showNotif('Wrong OTP. Please try again.');
-    });
+      showNotif(data.error || 'Wrong OTP. Please try again.');
+    }
+  } catch(e) {
+    btn.innerHTML = 'VERIFY OTP →';
+    btn.disabled = false;
+    showNotif('Network error. Please try again.');
+  }
 }
 
 function resendOTP() {
-  try { window.recaptchaVerifier.reset(); } catch(e) {}
   backToPhone();
   showNotif('Enter your number again to resend OTP');
 }
