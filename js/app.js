@@ -541,10 +541,16 @@ function generatePolygon(cLat, cLng, size, pts) {
 // ===== WALK =====
 // ===== AUTO-WALK DETECTION =====
 // GPS speed > 0.8 m/s = walking detected, auto starts
-// 30 seconds of no movement = auto stops and saves territory
+// Speed thresholds
+const WALK_SPEED_MIN = 0.8;   // m/s — min speed to count as walking (~3 km/h)
+const WALK_SPEED_MAX = 6.0;   // m/s — max walking speed (~21 km/h). Above = vehicle, ignored
+const STILL_TIMEOUT  = 30000; // 30 sec still = auto stop walk
+
 let stillTimer = null;
-const WALK_SPEED_MS = 0.8;    // metres/sec — normal walking pace
-const STILL_TIMEOUT = 30000;  // 30 sec still = stop walk
+
+function isVehicleSpeed(speed) {
+  return speed > WALK_SPEED_MAX; // car, bike, auto, train etc
+}
 
 function startAutoWalkGPS() {
   if (gpsWatcher) return; // already watching
@@ -561,21 +567,32 @@ function startAutoWalkGPS() {
       if (state.user) placeUserMarker(lat, lng);
       if (map) map.panTo([lat, lng]);
 
-      if (speed >= WALK_SPEED_MS) {
-        // Moving — clear still timer
+      // ===== VEHICLE CHECK — ignore completely if in car/bike =====
+      if (isVehicleSpeed(speed)) {
+        // In a vehicle — stop walk if active, show badge, do nothing else
+        if (state.walking) {
+          stopWalk();
+          showNotif('🚗 Vehicle detected — walk tracking paused');
+        }
+        document.getElementById('statusBadge').textContent = '🚗 IN VEHICLE';
+        return; // skip all step/territory counting
+      }
+
+      if (speed >= WALK_SPEED_MIN) {
+        // Walking/jogging speed — clear still timer
         if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
 
         // Auto start walk if not already walking
         if (!state.walking) startWalk(true);
 
-        // Record path point
+        // Record path + count steps
         addWalkPoint(lat, lng);
         state.steps += estimateSteps(speed);
-        state.distance += speed * 2 / 1000; // approx km per GPS update
+        state.distance += speed * 2 / 1000;
         updateStats();
 
       } else if (state.walking) {
-        // Slowing down — start still timer
+        // Slowing down / standing — start still timer
         if (!stillTimer) {
           stillTimer = setTimeout(() => {
             stopWalk();
@@ -744,28 +761,41 @@ function redrawTerritory(uid) {
     })
   );
 
-  // Show ONE label at center of the largest polygon only
-  const largestPath = paths.reduce((a, b) => a.length >= b.length ? a : b, paths[0]);
-  const tempPoly = L.polygon(largestPath);
-  const center = tempPoly.getBounds().getCenter();
-
-  // Steps: use live state for self, stored value for rivals
+  // Label at center of EVERY polygon — no box, just text in player's color
   const stepsCount = isMe ? state.steps : (entry.steps || 0);
-  const stepsLine = `<div style="opacity:0.8;font-size:9px">${stepsCount.toLocaleString()} steps</div>`;
 
-  const labelIcon = L.divIcon({
-    html: `<div style="background:rgba(0,0,0,0.80);color:white;padding:4px 10px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.7;border:1.5px solid ${entry.color};pointer-events:none">
-      <div style="color:${entry.color};font-size:11px;font-weight:800">${entry.name}</div>
-      <div style="opacity:0.95">${areaLabel}</div>
-      ${stepsLine}
-    </div>`,
-    className: '',
-    iconAnchor: [40, 24]
+  // Darken the player color for bold readable text (multiply hex channels by 0.7)
+  function darkenColor(hex) {
+    const c = hex.replace('#','');
+    const r = Math.floor(parseInt(c.slice(0,2),16) * 0.65);
+    const g = Math.floor(parseInt(c.slice(2,4),16) * 0.65);
+    const b = Math.floor(parseInt(c.slice(4,6),16) * 0.65);
+    return `rgb(${r},${g},${b})`;
+  }
+  const textColor = darkenColor(entry.color);
+
+  const labelMarkers = paths.map(path => {
+    const center = L.polygon(path).getBounds().getCenter();
+    const labelIcon = L.divIcon({
+      html: `<div style="
+          pointer-events:none;
+          text-align:center;
+          line-height:1.6;
+          white-space:nowrap;
+          text-shadow: 0 0 3px rgba(255,255,255,0.6), 0 0 6px rgba(255,255,255,0.4);
+        ">
+          <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}</div>
+          <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
+          <div style="font-size:9px;font-weight:600;color:${textColor};opacity:0.85">${stepsCount.toLocaleString()} steps</div>
+        </div>`,
+      className: '',
+      iconAnchor: [40, 24]
+    });
+    return L.marker(center, { icon: labelIcon, interactive: false });
   });
-  const labelMarker = L.marker(center, { icon: labelIcon, interactive: false });
 
-  // Group all layers + single label into one removable group
-  entry.layer = L.layerGroup([...polyLayers, labelMarker]).addTo(map);
+  // Group all polygon shapes + all labels into one removable group
+  entry.layer = L.layerGroup([...polyLayers, ...labelMarkers]).addTo(map);
 }
 
 // ===== CLOSE TERRITORY (merge + capture) =====
