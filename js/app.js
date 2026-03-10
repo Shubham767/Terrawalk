@@ -1015,13 +1015,22 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(initRecaptcha, 500);
 
   // ===== AUTO-LOGIN: restore session from localStorage =====
-  const savedUid = localStorage.getItem('tw_uid');
-  const savedPhone = localStorage.getItem('tw_phone');
-  if (savedUid && savedPhone) {
-    currentPhone = savedPhone;
-    state.userId = savedUid;
-    // Auto-load user — skips login screen if returning user
-    loadUserFromFirebase(savedUid);
+  // Clear any legacy keys from old app versions
+  const legacyUser = localStorage.getItem('tw_user');
+  if (legacyUser) {
+    localStorage.removeItem('tw_user');
+    localStorage.removeItem('tw_uid');
+    localStorage.removeItem('tw_phone');
+    // Force show login screen fresh
+    document.getElementById('loginModal').classList.add('open');
+  } else {
+    const savedUid = localStorage.getItem('tw_uid');
+    const savedPhone = localStorage.getItem('tw_phone');
+    if (savedUid && savedPhone) {
+      currentPhone = savedPhone;
+      state.userId = savedUid;
+      loadUserFromFirebase(savedUid);
+    }
   }
 });
 
