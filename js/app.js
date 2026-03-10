@@ -97,15 +97,12 @@ let confirmationResult = null;
 function initFirebase() {
   try {
     if (typeof firebase === 'undefined') {
-      console.warn('Firebase not loaded — demo mode');
       return;
     }
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
-    console.log('✅ Firebase connected');
     // Auth is handled via Twilio OTP — no Firebase Auth needed
   } catch (e) {
-    console.warn('Firebase init failed — demo mode:', e.message);
   }
 }
 
@@ -441,7 +438,6 @@ function initMap(onReady) {
       map.setView([lat, lng], 17);
       placeUserMarker(lat, lng);
       updateGpsStatus('locked', 'GPS Locked — auto-walk ON ✓');
-      addDemoTerritories();
       startAutoWalkGPS(); // auto-detect walking from now on
       showNotif('📍 GPS ready! Walk and territory claims automatically 🚶');
       if (onReady) onReady();
@@ -456,7 +452,6 @@ function initMap(onReady) {
       updateGpsStatus('searching', 'GPS unavailable — using Delhi');
       document.getElementById('walkBtn').style.display = 'block'; // manual only without GPS
       showNotif('📍 Enable location for real GPS tracking');
-      addDemoTerritories();
       if (onReady) onReady();
     },
     { enableHighAccuracy: true, timeout: 10000 }
@@ -498,36 +493,6 @@ function placeUserMarker(lat, lng) {
   });
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
-}
-
-function addDemoTerritories() {
-  // Clear any existing demo territories first (fresh start every time)
-  ['demo_0','demo_1','demo_2','demo_3'].forEach(demoUid => {
-    if (territoryStore[demoUid]) {
-      if (territoryStore[demoUid].layer) map.removeLayer(territoryStore[demoUid].layer);
-      delete territoryStore[demoUid];
-    }
-  });
-
-  const demos = [
-    { name: 'Arjun', avatar: '🤠', color: '#ff4b6e', offset: [0.0008, 0.0012], radius: 80 },
-    { name: 'Priya', avatar: '🦸', color: '#a855f7', offset: [-0.001, 0.0008], radius: 70 },
-    { name: 'Karan', avatar: '🦁', color: '#ffd700', offset: [0.0010, -0.0009], radius: 90 },
-    { name: 'Neha', avatar: '🦊', color: '#f97316', offset: [-0.0008, -0.0011], radius: 60 },
-  ];
-
-  demos.forEach((u, i) => {
-    const lat = state.currentLat + u.offset[0];
-    const lng = state.currentLng + u.offset[1];
-    try {
-      const circle = turf.circle([lng, lat], u.radius / 1000, { steps: 16, units: 'kilometers' });
-      const path = circle.geometry.coordinates[0].map(c => [c[1], c[0]]);
-      registerRivalTerritory('demo_' + i, u.name, u.color, path);
-    } catch(e) {
-      const poly = generatePolygon(lat, lng, 0.002, 8);
-      registerRivalTerritory('demo_' + i, u.name, u.color, poly);
-    }
-  });
 }
 
 function generatePolygon(cLat, cLng, size, pts) {
@@ -620,12 +585,7 @@ function startWalk(auto = false) {
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   if (!auto) {
-    if (state.gpsLocked) {
-      showNotif('Walk started! GPS tracking your path 🚶');
-    } else {
-      simulateWalk();
-      showNotif('Demo mode active 🗺️');
-    }
+    showNotif('Walk started! Move outside for GPS tracking 🚶');
   } else {
     showNotif('🚶 Walking detected! Claiming territory...');
   }
@@ -660,30 +620,6 @@ function stopWalk() {
 function estimateSteps(speed) {
   if (!speed || speed <= 0) return Math.floor(Math.random() * 5) + 8;
   return Math.floor(speed * 1.4 * 2); // ~1.4 steps/meter
-}
-
-function simulateWalk() {
-  let lat = state.currentLat, lng = state.currentLng;
-  let angle = Math.random() * 360;
-  let step = 0;
-  addWalkPoint(lat, lng);
-
-  walkInterval = setInterval(() => {
-    if (!state.walking) { clearInterval(walkInterval); return; }
-    angle += (Math.random() - 0.5) * 60;
-    const rad = angle * Math.PI / 180;
-    lat += Math.cos(rad) * 0.00008;
-    lng += Math.sin(rad) * 0.00008;
-    state.currentLat = lat;
-    state.currentLng = lng;
-    addWalkPoint(lat, lng);
-    placeUserMarker(lat, lng);
-    state.steps += Math.floor(Math.random() * 8) + 12;
-    state.distance += 0.008;
-    updateStats();
-    step++;
-    if (step % 22 === 0) { closeTerritory(); state.walkPath = [[lat, lng]]; }
-  }, 800);
 }
 
 function addWalkPoint(lat, lng) {
@@ -782,7 +718,7 @@ function redrawTerritory(uid) {
           text-align:center;
           line-height:1.6;
           white-space:nowrap;
-          text-shadow: 0 0 3px rgba(255,255,255,0.6), 0 0 6px rgba(255,255,255,0.4);
+          text-shadow: none;
         ">
           <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}</div>
           <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
@@ -854,7 +790,6 @@ function closeTerritory() {
       territoryStore[uid].geojson = newGeoJSON;
     }
   } catch(e) {
-    console.warn('Union error — using new polygon as fallback:', e);
     territoryStore[uid].geojson = newGeoJSON;
   }
 
@@ -1018,7 +953,7 @@ function formatNum(n) {
   return n.toString();
 }
 
-// ===== LEADERBOARD (demo fallback) =====
+// ===== LEADERBOARD =====
 function renderLeaderboards() {
   if (db) return; // Firebase handles it
   const local = [
@@ -1124,8 +1059,7 @@ function dismissInstall() {
 // ===== SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js')
-    .then(() => console.log('✅ Service Worker registered'))
-    .catch(e => console.warn('SW registration failed:', e));
+        .catch(e => console.warn('SW registration failed:', e));
 }
 
 // ===== BOOT =====
@@ -1138,7 +1072,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const storedVersion = localStorage.getItem('tw_version');
   if (storedVersion !== APP_VERSION) {
     // New version detected — clear all local storage and force fresh login
-    console.log(`New version detected: ${storedVersion} → ${APP_VERSION}. Clearing cache...`);
     localStorage.clear();
     localStorage.setItem('tw_version', APP_VERSION);
     document.getElementById('loginModal').classList.add('open');
@@ -1156,64 +1089,3 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ===== DEMO MODE =====
-function startDemo() {
-  if (!state.user) { showNotif('Please create your profile first!'); return; }
-  if (!map) { showNotif('Map still loading, try again!'); return; }
-
-  showNotif('🎮 Demo Mode — watch your territory appear!');
-
-  const center = map.getCenter();
-  state.currentLat = center.lat;
-  state.currentLng = center.lng;
-  state.walking = true;
-  state.walkPath = [];
-  state.sessionGain = 0;
-
-  document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
-  document.getElementById('walkBtn').classList.add('active');
-  document.getElementById('walkingHud').classList.add('visible');
-  document.getElementById('statusBadge').textContent = '🎮 DEMO';
-  document.getElementById('demoBtn').style.display = 'none';
-
-  const lat = state.currentLat;
-  const lng = state.currentLng;
-  const radius = 0.0012;
-  const totalSteps = 36;
-  let currentStep = 0;
-
-  addWalkPoint(lat + radius, lng);
-  placeUserMarker(lat + radius, lng);
-
-  walkInterval = setInterval(() => {
-    if (!state.walking) { clearInterval(walkInterval); return; }
-    currentStep++;
-    const angle = (currentStep / totalSteps) * 2 * Math.PI;
-    const newLat = lat + radius * Math.cos(angle);
-    const newLng = lng + radius * Math.sin(angle);
-    addWalkPoint(newLat, newLng);
-    placeUserMarker(newLat, newLng);
-    map.panTo([newLat, newLng]);
-    state.steps += Math.floor(Math.random() * 8) + 15;
-    state.distance += 0.023;
-    updateStats();
-
-    if (currentStep >= totalSteps) {
-      clearInterval(walkInterval);
-      setTimeout(() => {
-        closeTerritory();
-        state.walking = false;
-        document.getElementById('walkBtn').textContent = '▶ START WALK';
-        document.getElementById('walkBtn').classList.remove('active');
-        document.getElementById('walkingHud').classList.remove('visible');
-        document.getElementById('statusBadge').textContent = '🟢 READY';
-        document.getElementById('demoBtn').style.display = 'block';
-        updateStats();
-        checkAchievements();
-        persistState();
-        saveUserToFirebase();
-        showNotif('🎉 Territory claimed! +' + state.sessionGain + ' m²');
-      }, 500);
-    }
-  }, 300);
-}
