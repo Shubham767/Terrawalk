@@ -67,93 +67,27 @@ function initFirebase() {
   }
 }
 
-// ===== PHONE AUTH via Twilio Serverless =====
+// ===== PHONE LOGIN (no OTP — mobile number as unique ID) =====
 let currentPhone = '';
 
-function initRecaptcha() { /* not needed with Twilio */ }
+function initRecaptcha() { /* not needed */ }
 
-async function sendOTP() {
+function submitPhone() {
   const code = document.getElementById('countryCode').value.trim() || '+91';
   const num = document.getElementById('phoneInput').value.trim().replace(/\s/g,'');
   if (num.length < 10) { showNotif('Please enter a valid 10-digit number'); return; }
 
   currentPhone = code + num;
-  const btn = document.getElementById('sendOtpBtn');
-  btn.innerHTML = '<span class="loading-spinner"></span>Sending...';
+  const btn = document.getElementById('submitPhoneBtn');
+  btn.innerHTML = '<span class="loading-spinner"></span>Loading...';
   btn.disabled = true;
 
-  try {
-    const res = await fetch('/api/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: currentPhone })
-    });
-    const data = await res.json();
+  // Generate unique ID from phone number
+  const uid = 'ph_' + btoa(currentPhone).replace(/[^a-zA-Z0-9]/g,'');
+  state.userId = uid;
 
-    if (data.success) {
-      document.getElementById('otpSentTo').textContent = currentPhone;
-      showStep('otp');
-      document.getElementById('otp0').focus();
-      showNotif('OTP sent! Check your messages 📱');
-    } else if (data.error === 'UNVERIFIED_NUMBER') {
-      showNotif('⚠️ Please verify this number in your Twilio dashboard first');
-      btn.innerHTML = 'SEND OTP →';
-      btn.disabled = false;
-    } else {
-      showNotif(data.message || 'Could not send OTP. Try again.');
-      btn.innerHTML = 'SEND OTP →';
-      btn.disabled = false;
-    }
-  } catch(e) {
-    showNotif('Network error. Please try again.');
-    btn.innerHTML = 'SEND OTP →';
-    btn.disabled = false;
-  }
-}
-
-async function verifyOTP() {
-  const otp = [0,1,2,3,4,5].map(i => document.getElementById('otp'+i).value).join('');
-  if (otp.length < 6) { showNotif('Please enter the full 6-digit OTP'); return; }
-
-  const btn = document.getElementById('verifyOtpBtn');
-  btn.innerHTML = '<span class="loading-spinner"></span>Verifying...';
-  btn.disabled = true;
-
-  try {
-    const res = await fetch('/api/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: currentPhone, otp })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      // Use phone number as unique user ID (hashed for privacy)
-      const uid = 'ph_' + btoa(currentPhone).replace(/[^a-zA-Z0-9]/g,'');
-      state.userId = uid;
-      loadUserFromFirebase(uid);
-    } else {
-      btn.innerHTML = 'VERIFY OTP →';
-      btn.disabled = false;
-      showNotif(data.error || 'Wrong OTP. Please try again.');
-    }
-  } catch(e) {
-    btn.innerHTML = 'VERIFY OTP →';
-    btn.disabled = false;
-    showNotif('Network error. Please try again.');
-  }
-}
-
-function resendOTP() {
-  backToPhone();
-  showNotif('Enter your number again to resend OTP');
-}
-
-function backToPhone() {
-  showStep('phone');
-  document.getElementById('sendOtpBtn').innerHTML = 'SEND OTP →';
-  document.getElementById('sendOtpBtn').disabled = false;
-  [0,1,2,3,4,5].forEach(i => document.getElementById('otp'+i).value = '');
+  // Check if returning user
+  loadUserFromFirebase(uid);
 }
 
 function showStep(step) {
@@ -205,6 +139,8 @@ function loadUserFromFirebase(uid) {
       showNotif('Welcome back, ' + state.user.name + '! Your territory is loading... 🗺️');
     } else {
       // New user — show profile setup step
+      const btn = document.getElementById('submitPhoneBtn');
+      if (btn) { btn.innerHTML = 'CONTINUE →'; btn.disabled = false; }
       showStep('profile');
     }
   });
