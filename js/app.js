@@ -78,11 +78,11 @@ function initFirebase() {
 // ===== PHONE AUTH =====
 function initRecaptcha() {
   try {
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-      size: 'normal',
-      callback: () => { document.getElementById('sendOtpBtn').disabled = false; }
+    // Use invisible reCAPTCHA — no checkbox, works on mobile browsers
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendOtpBtn', {
+      size: 'invisible',
+      callback: () => { /* auto-proceeds */ }
     });
-    window.recaptchaVerifier.render();
   } catch(e) { console.warn('reCAPTCHA init failed:', e); }
 }
 
@@ -109,9 +109,21 @@ function sendOTP() {
       console.error(err);
       btn.innerHTML = 'SEND OTP →';
       btn.disabled = false;
-      showNotif('Failed to send OTP: ' + err.message);
-      // Reset recaptcha on error
-      try { window.recaptchaVerifier.reset(); } catch(e) {}
+
+      // Destroy and recreate recaptcha on error to prevent loop
+      try {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      } catch(e) {}
+      setTimeout(initRecaptcha, 500);
+
+      if (err.code === 'auth/invalid-phone-number') {
+        showNotif('Invalid number. Use format: +91XXXXXXXXXX');
+      } else if (err.code === 'auth/too-many-requests') {
+        showNotif('Too many attempts. Please try after some time.');
+      } else {
+        showNotif('Could not send OTP. Check your number and try again.');
+      }
     });
 }
 
