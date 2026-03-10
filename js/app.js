@@ -18,8 +18,31 @@ const FIREBASE_CONFIG = {
 };
 
 // ===== CONSTANTS =====
-const AVATARS = ['🧢⚡','🥬💪','🔬🧪','🐱🔴','👻💚','🗡️🌀','🧠👾','💀🏴‍☠️','🦸‍♀️✨','🤜🔥'];
-const AVATAR_NAMES = ['The Trainer','The Sailor','The Lab Kid','The Cat','Ghost Rider','The Warrior','The Brain','The Pirate','Power Girl','Street Fighter'];
+const AVATARS = [
+  '🤠','🦸','🕵️','👩‍💼','👨‍🚀',  // human: cowboy, superhero, detective, corporate, astronaut
+  '👦','🧙','🥷','👩‍🔬','🤴',       // human: kid, wizard, ninja, scientist, prince
+  '🐺','🦊','🐻','🦁','🐯',         // animals: wolf, fox, bear, lion, tiger
+  '🦅','🐘','🦓','🦒','🐆'          // animals: eagle, elephant, zebra, giraffe, leopard
+];
+const AVATAR_NAMES = ["Cowboy", "Superhero", "Ninja", "The Suit", "Astronaut", "Kid", "Wizard", "Detective", "Scientist", "Prince", "Wolf", "Fox", "Bear", "Lion", "Tiger"];
+
+const AVATARS_SVG = [
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><ellipse cx="26" cy="10" rx="18" ry="4" fill="#7a5c0f"/><rect x="14" y="3" width="24" height="10" rx="3" fill="#9a7520"/><circle cx="26" cy="22" r="9" fill="#FDBCB4"/><circle cx="23" cy="21" r="1.3" fill="#333"/><circle cx="29" cy="21" r="1.3" fill="#333"/><path d="M23 25 Q26 27 29 25" stroke="#c07868" stroke-width="1" fill="none"/><rect x="17" y="31" width="18" height="16" rx="3" fill="#c0392b"/><g class="arm-left"><rect x="8" y="31" width="9" height="5" rx="2.5" fill="#c0392b"/><circle cx="10" cy="39" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="35" y="31" width="9" height="5" rx="2.5" fill="#c0392b"/><circle cx="42" cy="39" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="17" y="47" width="8" height="16" rx="3" fill="#2c3e50"/><rect x="15" y="60" width="11" height="7" rx="3" fill="#5D3A1A"/></g><g class="leg-right"><rect x="27" y="47" width="8" height="16" rx="3" fill="#2c3e50"/><rect x="26" y="60" width="11" height="7" rx="3" fill="#5D3A1A"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><path d="M15 33 Q10 56 14 69 Q26 62 38 69 Q42 56 37 33Z" fill="#8B0000" opacity="0.85"/><circle cx="26" cy="19" r="10" fill="#FDBCB4"/><path d="M16 16 Q26 10 36 16 L34 20 Q26 15 18 20Z" fill="#1a237e"/><ellipse cx="21" cy="18" rx="3" ry="2" fill="#1a237e"/><ellipse cx="31" cy="18" rx="3" ry="2" fill="#1a237e"/><circle cx="21" cy="18" r="1.2" fill="white"/><circle cx="31" cy="18" r="1.2" fill="white"/><rect x="16" y="29" width="20" height="20" rx="3" fill="#1565C0"/><text x="26" y="43" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffd700">S</text><g class="arm-left"><rect x="6" y="29" width="10" height="5" rx="2.5" fill="#1565C0"/><circle cx="8" cy="38" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="36" y="29" width="10" height="5" rx="2.5" fill="#1565C0"/><circle cx="44" cy="38" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="17" y="48" width="8" height="16" rx="3" fill="#1565C0"/><rect x="15" y="61" width="11" height="7" rx="3" fill="#B71C1C"/></g><g class="leg-right"><rect x="27" y="48" width="8" height="16" rx="3" fill="#1565C0"/><rect x="26" y="61" width="11" height="7" rx="3" fill="#B71C1C"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><circle cx="26" cy="19" r="10" fill="#2c2c2c"/><rect x="16" y="14" width="20" height="8" rx="2" fill="#1a1a1a"/><circle cx="22" cy="19" r="1.5" fill="white"/><circle cx="30" cy="19" r="1.5" fill="white"/><rect x="16" y="29" width="20" height="20" rx="3" fill="#1a1a1a"/><g class="arm-left"><rect x="5" y="29" width="11" height="5" rx="2.5" fill="#1a1a1a"/><rect x="3" y="31" width="6" height="13" rx="2" fill="#c0392b"/></g><g class="arm-right"><rect x="36" y="29" width="11" height="5" rx="2.5" fill="#1a1a1a"/><rect x="43" y="31" width="6" height="13" rx="2" fill="#c0392b"/></g><g class="leg-left"><rect x="17" y="48" width="8" height="16" rx="3" fill="#1a1a1a"/><rect x="15" y="61" width="11" height="7" rx="3" fill="#111"/></g><g class="leg-right"><rect x="27" y="48" width="8" height="16" rx="3" fill="#1a1a1a"/><rect x="26" y="61" width="11" height="7" rx="3" fill="#111"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><circle cx="26" cy="18" r="9" fill="#FDBCB4"/><circle cx="23" cy="17" r="1.2" fill="#333"/><circle cx="29" cy="17" r="1.2" fill="#333"/><path d="M23 21 Q26 23 29 21" stroke="#c07868" stroke-width="1" fill="none"/><rect x="14" y="7" width="24" height="9" rx="2" fill="#2c3e50"/><rect x="15" y="27" width="22" height="22" rx="3" fill="#2c3e50"/><rect x="23" y="27" width="6" height="22" fill="#ecf0f1"/><circle cx="26" cy="33" r="1.5" fill="#e74c3c"/><circle cx="26" cy="38" r="1.5" fill="#e74c3c"/><path d="M19 27 L23 35 L15 35Z" fill="#1a252f"/><path d="M33 27 L29 35 L37 35Z" fill="#1a252f"/><g class="arm-left"><rect x="5" y="27" width="10" height="5" rx="2.5" fill="#2c3e50"/><circle cx="7" cy="36" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="37" y="27" width="10" height="5" rx="2.5" fill="#2c3e50"/><circle cx="45" cy="36" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="16" y="48" width="8" height="16" rx="3" fill="#1a252f"/><rect x="14" y="61" width="11" height="7" rx="3" fill="#111"/></g><g class="leg-right"><rect x="28" y="48" width="8" height="16" rx="3" fill="#1a252f"/><rect x="27" y="61" width="11" height="7" rx="3" fill="#111"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><circle cx="26" cy="19" r="13" fill="#ecf0f1"/><circle cx="26" cy="19" r="8" fill="#85c1e9"/><circle cx="23" cy="18" r="1.5" fill="#1a1a1a"/><circle cx="29" cy="18" r="1.5" fill="#1a1a1a"/><path d="M23 22 Q26 24 29 22" stroke="#555" stroke-width="1" fill="none"/><rect x="2" y="25" width="7" height="11" rx="3" fill="#95a5a6"/><rect x="43" y="25" width="7" height="11" rx="3" fill="#95a5a6"/><rect x="14" y="30" width="24" height="24" rx="6" fill="#ecf0f1"/><rect x="19" y="35" width="14" height="9" rx="2" fill="#3498db"/><g class="arm-left"><rect x="5" y="30" width="9" height="6" rx="3" fill="#ecf0f1"/></g><g class="arm-right"><rect x="38" y="30" width="9" height="6" rx="3" fill="#ecf0f1"/></g><g class="leg-left"><rect x="16" y="53" width="9" height="15" rx="4" fill="#bdc3c7"/><ellipse cx="20" cy="68" rx="7" ry="4" fill="#95a5a6"/></g><g class="leg-right"><rect x="27" y="53" width="9" height="15" rx="4" fill="#bdc3c7"/><ellipse cx="31" cy="68" rx="7" ry="4" fill="#95a5a6"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><rect x="14" y="3" width="24" height="9" rx="5" fill="#e74c3c"/><circle cx="26" cy="21" r="10" fill="#FDBCB4"/><circle cx="22" cy="20" r="1.5" fill="#333"/><circle cx="30" cy="20" r="1.5" fill="#333"/><circle cx="22" cy="24" r="2.5" fill="#ffb3b3" opacity="0.6"/><circle cx="30" cy="24" r="2.5" fill="#ffb3b3" opacity="0.6"/><path d="M22 25 Q26 28 30 25" stroke="#c07868" stroke-width="1.2" fill="none"/><rect x="17" y="31" width="18" height="16" rx="3" fill="#3498db"/><text x="26" y="43" text-anchor="middle" font-size="9" fill="white">★</text><g class="arm-left"><rect x="7" y="31" width="10" height="5" rx="2.5" fill="#3498db"/><circle cx="9" cy="39" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="35" y="31" width="10" height="5" rx="2.5" fill="#3498db"/><circle cx="43" cy="39" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="17" y="47" width="8" height="16" rx="3" fill="#e74c3c"/><rect x="15" y="60" width="11" height="7" rx="4" fill="#c0392b"/></g><g class="leg-right"><rect x="27" y="47" width="8" height="16" rx="3" fill="#e74c3c"/><rect x="26" y="60" width="11" height="7" rx="4" fill="#c0392b"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><polygon points="26,2 33,19 19,19" fill="#6c3483"/><ellipse cx="26" cy="19" rx="13" ry="4" fill="#6c3483"/><circle cx="26" cy="27" r="9" fill="#FDBCB4"/><circle cx="23" cy="26" r="1.2" fill="#333"/><circle cx="29" cy="26" r="1.2" fill="#333"/><path d="M23 30 Q26 32 29 30" stroke="#c07868" stroke-width="1" fill="none"/><rect x="15" y="36" width="22" height="20" rx="4" fill="#6c3483"/><path d="M18 36 Q26 31 34 36" stroke="#f39c12" stroke-width="1.5" fill="none"/><g class="arm-left"><rect x="5" y="36" width="10" height="5" rx="2.5" fill="#6c3483"/><circle cx="7" cy="45" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="37" y="36" width="10" height="5" rx="2.5" fill="#6c3483"/><rect x="44" y="38" width="5" height="20" rx="2" fill="#8B6914"/><circle cx="46" cy="37" r="5" fill="#f1c40f"/></g><g class="leg-left"><rect x="16" y="55" width="8" height="14" rx="3" fill="#4a235a"/><rect x="14" y="66" width="11" height="6" rx="3" fill="#3b1a47"/></g><g class="leg-right"><rect x="28" y="55" width="8" height="14" rx="3" fill="#4a235a"/><rect x="27" y="66" width="11" height="6" rx="3" fill="#3b1a47"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><ellipse cx="26" cy="10" rx="16" ry="4" fill="#2c2c2c"/><rect x="14" y="4" width="24" height="9" rx="2" fill="#3d3d3d"/><circle cx="26" cy="22" r="9" fill="#FDBCB4"/><circle cx="23" cy="21" r="1.2" fill="#333"/><circle cx="29" cy="21" r="1.2" fill="#333"/><path d="M23 25 Q26 27 29 25" stroke="#c07868" stroke-width="1" fill="none"/><rect x="15" y="31" width="22" height="20" rx="3" fill="#5d4037"/><path d="M19 31 L23 39 L15 39Z" fill="#3e2723"/><path d="M33 31 L29 39 L37 39Z" fill="#3e2723"/><g class="arm-left"><rect x="4" y="31" width="11" height="5" rx="2.5" fill="#5d4037"/><rect x="3" y="35" width="5" height="12" rx="2" fill="#8B6914"/></g><g class="arm-right"><rect x="37" y="31" width="11" height="5" rx="2.5" fill="#5d4037"/><circle cx="45" cy="39" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="16" y="50" width="8" height="16" rx="3" fill="#3e2723"/><rect x="14" y="63" width="11" height="7" rx="3" fill="#1a0f0a"/></g><g class="leg-right"><rect x="28" y="50" width="8" height="16" rx="3" fill="#3e2723"/><rect x="27" y="63" width="11" height="7" rx="3" fill="#1a0f0a"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><circle cx="26" cy="18" r="9" fill="#FDBCB4"/><ellipse cx="22" cy="17" rx="4" ry="3" fill="none" stroke="#555" stroke-width="1.5"/><ellipse cx="30" cy="17" rx="4" ry="3" fill="none" stroke="#555" stroke-width="1.5"/><line x1="26" y1="17" x2="28" y2="17" stroke="#555" stroke-width="1.5"/><circle cx="22" cy="17" r="1.2" fill="#1a6baa"/><circle cx="30" cy="17" r="1.2" fill="#1a6baa"/><path d="M23 21 Q26 23 29 21" stroke="#c07868" stroke-width="1" fill="none"/><rect x="15" y="27" width="22" height="22" rx="3" fill="white" stroke="#ddd" stroke-width="1"/><rect x="18" y="31" width="16" height="14" rx="2" fill="#d6eaf8"/><g class="arm-left"><rect x="5" y="27" width="10" height="5" rx="2.5" fill="white" stroke="#ddd" stroke-width="1"/><circle cx="7" cy="36" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="37" y="27" width="10" height="5" rx="2.5" fill="white" stroke="#ddd" stroke-width="1"/><circle cx="43" cy="35" r="5" fill="#85c1e9" opacity="0.9"/></g><g class="leg-left"><rect x="16" y="48" width="8" height="16" rx="3" fill="#1a252f"/><rect x="14" y="61" width="11" height="7" rx="3" fill="#111"/></g><g class="leg-right"><rect x="28" y="48" width="8" height="16" rx="3" fill="#1a252f"/><rect x="27" y="61" width="11" height="7" rx="3" fill="#111"/></g></svg>`,
+  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"><polygon points="26,2 30,11 38,9 32,16 35,24 26,19 17,24 20,16 14,9 22,11" fill="#ffd700"/><circle cx="26" cy="23" r="9" fill="#FDBCB4"/><circle cx="23" cy="22" r="1.2" fill="#333"/><circle cx="29" cy="22" r="1.2" fill="#333"/><path d="M23 26 Q26 28 29 26" stroke="#c07868" stroke-width="1" fill="none"/><rect x="15" y="32" width="22" height="20" rx="3" fill="#1565C0"/><rect x="21" y="32" width="10" height="20" fill="#0d47a1"/><g class="arm-left"><rect x="5" y="32" width="10" height="5" rx="2.5" fill="#1565C0"/><circle cx="7" cy="41" r="4" fill="#FDBCB4"/></g><g class="arm-right"><rect x="37" y="32" width="10" height="5" rx="2.5" fill="#1565C0"/><circle cx="45" cy="41" r="4" fill="#FDBCB4"/></g><g class="leg-left"><rect x="16" y="51" width="8" height="15" rx="3" fill="#0d47a1"/><rect x="14" y="63" width="11" height="7" rx="3" fill="#ffd700"/></g><g class="leg-right"><rect x="28" y="51" width="8" height="15" rx="3" fill="#0d47a1"/><rect x="27" y="63" width="11" height="7" rx="3" fill="#ffd700"/></g></svg>`,
+  `<svg width="60" height="72" viewBox="0 0 60 72" xmlns="http://www.w3.org/2000/svg"><path d="M44 40 Q58 33 54 21" stroke="#95a5a6" stroke-width="5" fill="none" stroke-linecap="round"/><ellipse cx="30" cy="47" rx="16" ry="13" fill="#95a5a6"/><ellipse cx="30" cy="50" rx="9" ry="8" fill="#bdc3c7"/><polygon points="13,21 9,5 21,17" fill="#7f8c8d"/><polygon points="29,21 33,5 23,17" fill="#7f8c8d"/><polygon points="14,20 11,8 20,17" fill="#ecdbcf"/><polygon points="28,20 31,8 24,17" fill="#ecdbcf"/><ellipse cx="21" cy="25" rx="13" ry="11" fill="#95a5a6"/><ellipse cx="21" cy="30" rx="6" ry="4" fill="#bdc3c7"/><ellipse cx="21" cy="27" rx="3" ry="2" fill="#2c3e50"/><circle cx="15" cy="23" r="2.5" fill="#f39c12"/><circle cx="27" cy="23" r="2.5" fill="#f39c12"/><circle cx="15" cy="23" r="1.2" fill="#111"/><circle cx="27" cy="23" r="1.2" fill="#111"/><g class="leg-left"><rect x="16" y="57" width="9" height="13" rx="4" fill="#7f8c8d"/><ellipse cx="20" cy="70" rx="6" ry="3" fill="#6d7d7e"/></g><g class="leg-right"><rect x="30" y="57" width="9" height="13" rx="4" fill="#7f8c8d"/><ellipse cx="34" cy="70" rx="6" ry="3" fill="#6d7d7e"/></g></svg>`,
+  `<svg width="60" height="72" viewBox="0 0 60 72" xmlns="http://www.w3.org/2000/svg"><path d="M44 40 Q60 30 55 18" stroke="#e67e22" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="54" cy="17" r="5" fill="#fff3e0"/><ellipse cx="29" cy="47" rx="15" ry="12" fill="#e67e22"/><ellipse cx="29" cy="50" rx="8" ry="7" fill="#fdebd0"/><polygon points="13,21 8,3 22,16" fill="#e67e22"/><polygon points="29,21 34,3 20,16" fill="#e67e22"/><polygon points="14,20 10,7 21,17" fill="#fff3e0"/><polygon points="28,20 32,7 21,17" fill="#fff3e0"/><ellipse cx="21" cy="24" rx="12" ry="10" fill="#e67e22"/><ellipse cx="21" cy="29" rx="6" ry="4" fill="#fdebd0"/><ellipse cx="21" cy="26" rx="2.5" ry="2" fill="#1a1a1a"/><circle cx="15" cy="22" r="2.5" fill="#2c3e50"/><circle cx="27" cy="22" r="2.5" fill="#2c3e50"/><circle cx="15" cy="22" r="1.2" fill="#111"/><circle cx="27" cy="22" r="1.2" fill="#111"/><g class="leg-left"><rect x="16" y="56" width="9" height="13" rx="4" fill="#d35400"/><ellipse cx="20" cy="69" rx="6" ry="3" fill="#c0392b"/></g><g class="leg-right"><rect x="29" y="56" width="9" height="13" rx="4" fill="#d35400"/><ellipse cx="33" cy="69" rx="6" ry="3" fill="#c0392b"/></g></svg>`,
+  `<svg width="60" height="72" viewBox="0 0 60 72" xmlns="http://www.w3.org/2000/svg"><ellipse cx="30" cy="48" rx="17" ry="15" fill="#795548"/><ellipse cx="30" cy="52" rx="10" ry="9" fill="#a1887f"/><circle cx="15" cy="17" r="8" fill="#795548"/><circle cx="31" cy="17" r="8" fill="#795548"/><circle cx="15" cy="17" r="5" fill="#a1887f"/><circle cx="31" cy="17" r="5" fill="#a1887f"/><circle cx="23" cy="26" r="13" fill="#795548"/><ellipse cx="23" cy="32" rx="7" ry="5" fill="#a1887f"/><ellipse cx="23" cy="28" rx="3.5" ry="2.5" fill="#1a1a1a"/><circle cx="17" cy="24" r="3" fill="#1a1a1a"/><circle cx="29" cy="24" r="3" fill="#1a1a1a"/><circle cx="18" cy="23" r="1" fill="white"/><circle cx="30" cy="23" r="1" fill="white"/><g class="leg-left"><rect x="16" y="60" width="10" height="12" rx="5" fill="#6d4c41"/><ellipse cx="21" cy="72" rx="7" ry="3.5" fill="#5d4037"/></g><g class="leg-right"><rect x="30" y="60" width="10" height="12" rx="5" fill="#6d4c41"/><ellipse cx="35" cy="72" rx="7" ry="3.5" fill="#5d4037"/></g></svg>`,
+  `<svg width="60" height="72" viewBox="0 0 60 72" xmlns="http://www.w3.org/2000/svg"><path d="M46 44 Q60 37 56 25" stroke="#d4890a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="56" cy="24" r="5" fill="#d4890a"/><ellipse cx="32" cy="49" rx="17" ry="13" fill="#e8b86d"/><ellipse cx="32" cy="52" rx="10" ry="8" fill="#f5cba7"/><circle cx="20" cy="26" r="15" fill="#d4890a"/><circle cx="20" cy="26" r="10" fill="#e8b86d"/><circle cx="12" cy="17" r="5" fill="#e8b86d"/><circle cx="28" cy="17" r="5" fill="#e8b86d"/><circle cx="12" cy="17" r="3" fill="#f5cba7"/><circle cx="28" cy="17" r="3" fill="#f5cba7"/><ellipse cx="20" cy="30" rx="6" ry="4" fill="#f5cba7"/><ellipse cx="20" cy="27" rx="2.5" ry="2" fill="#c0392b"/><circle cx="14" cy="24" r="2.5" fill="#27ae60"/><circle cx="26" cy="24" r="2.5" fill="#27ae60"/><circle cx="14" cy="24" r="1.2" fill="#111"/><circle cx="26" cy="24" r="1.2" fill="#111"/><g class="leg-left"><rect x="17" y="59" width="10" height="13" rx="4" fill="#d4a843"/><ellipse cx="22" cy="72" rx="7" ry="3.5" fill="#c8973c"/></g><g class="leg-right"><rect x="31" y="59" width="10" height="13" rx="4" fill="#d4a843"/><ellipse cx="36" cy="72" rx="7" ry="3.5" fill="#c8973c"/></g></svg>`,
+  `<svg width="60" height="72" viewBox="0 0 60 72" xmlns="http://www.w3.org/2000/svg"><path d="M44 42 Q58 35 54 23" stroke="#e67e22" stroke-width="5" fill="none" stroke-linecap="round"/><ellipse cx="30" cy="48" rx="16" ry="13" fill="#e67e22"/><ellipse cx="30" cy="51" rx="9" ry="8" fill="#fdebd0"/><line x1="20" y1="38" x2="24" y2="50" stroke="#c0392b" stroke-width="2"/><line x1="30" y1="36" x2="30" y2="50" stroke="#c0392b" stroke-width="2"/><line x1="40" y1="38" x2="36" y2="50" stroke="#c0392b" stroke-width="2"/><circle cx="13" cy="17" r="6" fill="#e67e22"/><circle cx="29" cy="17" r="6" fill="#e67e22"/><circle cx="13" cy="17" r="3.5" fill="#fdebd0"/><circle cx="29" cy="17" r="3.5" fill="#fdebd0"/><circle cx="21" cy="25" r="12" fill="#e67e22"/><line x1="15" y1="16" x2="18" y2="24" stroke="#c0392b" stroke-width="1.5"/><line x1="21" y1="14" x2="21" y2="22" stroke="#c0392b" stroke-width="1.5"/><line x1="27" y1="16" x2="24" y2="24" stroke="#c0392b" stroke-width="1.5"/><ellipse cx="21" cy="29" rx="6" ry="4" fill="#fdebd0"/><ellipse cx="21" cy="26" rx="2.5" ry="2" fill="#1a1a1a"/><circle cx="15" cy="23" r="2.5" fill="#2c3e50"/><circle cx="27" cy="23" r="2.5" fill="#2c3e50"/><circle cx="15" cy="23" r="1.2" fill="#111"/><circle cx="27" cy="23" r="1.2" fill="#111"/><g class="leg-left"><rect x="16" y="58" width="10" height="12" rx="4" fill="#d35400"/><ellipse cx="21" cy="70" rx="6" ry="3" fill="#c0392b"/></g><g class="leg-right"><rect x="30" y="58" width="10" height="12" rx="4" fill="#d35400"/><ellipse cx="35" cy="70" rx="6" ry="3" fill="#c0392b"/></g></svg>`,
+];
 const COLORS = ['#00e5a0','#ff4b6e','#4b9fff','#ffd700','#ff6b35','#a855f7','#ec4899','#14b8a6','#f97316','#84cc16'];
 const CITIES = ['Mumbai','Delhi','Bangalore','Hyderabad','Chennai','Pune','Kolkata','Ahmedabad','Jaipur','Surat'];
 const DECAY_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48 hours
@@ -51,6 +74,20 @@ let deferredInstallPrompt = null;
 // ===== FIREBASE INIT =====
 let auth = null;
 let confirmationResult = null;
+
+(function injectWalkCSS() {
+  const style = document.createElement('style');
+  style.textContent = `/* ===== WALKING ANIMATION ===== */
+.tw-avatar-walking .tw-leg-left  { transform-origin: 50% 0%; animation: twWalkLeg 0.5s ease-in-out infinite; }
+.tw-avatar-walking .tw-leg-right { transform-origin: 50% 0%; animation: twWalkLeg 0.5s ease-in-out infinite reverse; }
+.tw-avatar-walking .tw-arm-left  { transform-origin: 50% 0%; animation: twWalkArm 0.5s ease-in-out infinite reverse; }
+.tw-avatar-walking .tw-arm-right { transform-origin: 50% 0%; animation: twWalkArm 0.5s ease-in-out infinite; }
+.tw-avatar-walking               { animation: twBounce 0.5s ease-in-out infinite; }
+@keyframes twWalkLeg { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(22deg)} 75%{transform:rotate(-22deg)} }
+@keyframes twWalkArm { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(18deg)} 75%{transform:rotate(-18deg)} }
+@keyframes twBounce  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }`;
+  document.head.appendChild(style);
+})();
 
 function initFirebase() {
   try {
@@ -85,6 +122,10 @@ function submitPhone() {
   // Generate unique ID from phone number
   const uid = 'ph_' + btoa(currentPhone).replace(/[^a-zA-Z0-9]/g,'');
   state.userId = uid;
+
+  // Save session so user stays logged in on refresh
+  localStorage.setItem('tw_uid', uid);
+  localStorage.setItem('tw_phone', currentPhone);
 
   // Check if returning user
   loadUserFromFirebase(uid);
@@ -270,10 +311,12 @@ function renderFirebaseLeaderboard(users) {
 // ===== PROFILE SETUP =====
 function buildProfileModal() {
   const avatarPicker = document.getElementById('avatarPicker');
-  AVATARS.forEach((a, i) => {
+  AVATAR_NAMES.forEach((name, i) => {
     const el = document.createElement('div');
     el.className = 'avatar-option' + (i === 0 ? ' selected' : '');
-    el.innerHTML = `<span style="font-size:20px;line-height:1">${a}</span><span class="av-label">${AVATAR_NAMES[i]}</span>`;
+    el.dataset.avatar = name;
+    const svg = AVATARS_SVG[i] || '';
+    el.innerHTML = `<div style="width:40px;height:56px;display:flex;align-items:center;justify-content:center;overflow:hidden">${svg}</div><span class="av-label">${name}</span>`;
     el.onclick = () => {
       document.querySelectorAll('.avatar-option').forEach(x => x.classList.remove('selected'));
       el.classList.add('selected');
@@ -299,7 +342,7 @@ function createProfile() {
   const name = document.getElementById('usernameInput').value.trim();
   if (!name) { showNotif('Please enter your warrior name!'); return; }
 
-  const avatar = document.querySelector('.avatar-option.selected').querySelector('span').textContent;
+  const avatar = document.querySelector('.avatar-option.selected').dataset.avatar || AVATAR_NAMES[0];
   const color = document.querySelector('.color-option.selected').dataset.c;
   const city = CITIES[Math.floor(Math.random() * CITIES.length)];
 
@@ -384,14 +427,31 @@ function updateGpsStatus(status, text) {
   label.textContent = text;
 }
 
+function getAvatarSVG(avatarName) {
+  const idx = AVATAR_NAMES.indexOf(avatarName);
+  if (idx >= 0 && AVATARS_SVG[idx]) {
+    // Replace class names with tw- prefixed versions for scoped CSS
+    return AVATARS_SVG[idx]
+      .replace(/class="arm-left"/g, 'class="tw-arm-left"')
+      .replace(/class="arm-right"/g, 'class="tw-arm-right"')
+      .replace(/class="leg-left"/g, 'class="tw-leg-left"')
+      .replace(/class="leg-right"/g, 'class="tw-leg-right"');
+  }
+  return `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" fill="${state.user ? state.user.color : '#00e5a0'}"/></svg>`;
+}
+
 function placeUserMarker(lat, lng) {
   const name = state.user ? state.user.name : 'You';
+  const isWalking = state.walking;
+  const svgContent = getAvatarSVG(state.user ? state.user.avatar : '');
+  const walkClass = isWalking ? 'tw-avatar-walking' : '';
+
   const icon = L.divIcon({
-    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
-      <div style="width:40px;height:40px;border-radius:50%;background:${state.user.color};border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 20px ${state.user.color};line-height:1">${state.user.avatar}</div>
-      <div style="background:rgba(0,0,0,0.75);color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;letter-spacing:0.5px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${name}</div>
+    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;filter:drop-shadow(0 0 6px ${state.user.color})">
+      <div class="${walkClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center">${svgContent}</div>
+      <div style="background:rgba(0,0,0,0.8);color:white;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color}">${name}</div>
     </div>`,
-    iconSize: [80, 56], iconAnchor: [40, 20], className: ''
+    iconSize: [72, 92], iconAnchor: [36, 72], className: ''
   });
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
@@ -407,10 +467,10 @@ function addDemoTerritories() {
   });
 
   const demos = [
-    { name: 'Arjun', avatar: '🥬💪', color: '#ff4b6e', offset: [0.003, 0.004], radius: 200 },
-    { name: 'Priya', avatar: '🦸‍♀️✨', color: '#a855f7', offset: [-0.004, 0.002], radius: 150 },
-    { name: 'Karan', avatar: '🔬🧪', color: '#ffd700', offset: [0.002, -0.003], radius: 250 },
-    { name: 'Neha', avatar: '👻💚', color: '#f97316', offset: [-0.002, -0.004], radius: 100 },
+    { name: 'Arjun', avatar: '🤠', color: '#ff4b6e', offset: [0.0008, 0.0012], radius: 80 },
+    { name: 'Priya', avatar: '🦸', color: '#a855f7', offset: [-0.001, 0.0008], radius: 70 },
+    { name: 'Karan', avatar: '🦁', color: '#ffd700', offset: [0.0010, -0.0009], radius: 90 },
+    { name: 'Neha', avatar: '🦊', color: '#f97316', offset: [-0.0008, -0.0011], radius: 60 },
   ];
 
   demos.forEach((u, i) => {
@@ -447,6 +507,8 @@ function startWalk() {
   document.getElementById('walkBtn').classList.add('active');
   document.getElementById('walkingHud').classList.add('visible');
   document.getElementById('statusBadge').textContent = '🔴 WALKING';
+  // Refresh avatar marker with walking animation
+  if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   // Real GPS tracking
   if (navigator.geolocation && state.gpsLocked) {
@@ -481,12 +543,14 @@ function stopWalk() {
 
   if (gpsWatcher) navigator.geolocation.clearWatch(gpsWatcher);
   if (walkInterval) clearInterval(walkInterval);
-  if (state.walkPath.length > 2) closeTerritory();
+  if (state.walkPath.length > 2) { closeTerritory(); state.walkPath = []; }
 
   document.getElementById('walkBtn').textContent = '▶ START WALK';
   document.getElementById('walkBtn').classList.remove('active');
   document.getElementById('walkingHud').classList.remove('visible');
   document.getElementById('statusBadge').textContent = '🟢 READY';
+  // Refresh avatar marker — stop walking animation
+  if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   updateStats();
   checkAchievements();
@@ -583,39 +647,39 @@ function redrawTerritory(uid) {
   const paths = geojsonToLeaflet(entry.geojson);
   if (!paths.length) return;
 
-  // Calculate TOTAL area across all polygons (sum of entire territory)
+  // Calculate TOTAL area across the entire merged territory (one number for all polygons)
   const totalAreaM2 = Math.floor(turf.area(entry.geojson));
-  const areaLabel = totalAreaM2 >= 1000
-    ? (totalAreaM2 / 1000).toFixed(1) + ' km²'
+  const areaLabel = totalAreaM2 >= 1000000
+    ? (totalAreaM2 / 1000000).toFixed(2) + ' km²'
     : totalAreaM2 + ' m²';
 
-  const layers = paths.map((path, idx) => {
-    const poly = L.polygon(path, {
+  // Draw all polygon shapes
+  const polyLayers = paths.map(path =>
+    L.polygon(path, {
       color: entry.color,
       fillColor: entry.color,
       fillOpacity: isMe ? 0.45 : 0.25,
       weight: isMe ? 3 : 1.5,
       smoothFactor: 1
-    });
+    })
+  );
 
-    // Show name + total area label only on the first polygon
-    if (idx === 0) {
-      const center = poly.getBounds().getCenter();
-      const label = L.divIcon({
-        html: `<div style="background:rgba(0,0,0,0.7);color:white;padding:3px 7px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.4;border:1px solid ${entry.color}">
-          <div style="color:${entry.color}">${entry.name}</div>
-          <div>${areaLabel}</div>
-        </div>`,
-        className: '',
-        iconAnchor: [40, 16]
-      });
-      const labelMarker = L.marker(center, { icon: label, interactive: false }).addTo(map);
-      layers.push(labelMarker); // add to layer group so it gets cleaned up with the polygon
-    }
-    return poly;
+  // Show ONE label at center of the largest polygon only
+  const largestPath = paths.reduce((a, b) => a.length >= b.length ? a : b, paths[0]);
+  const tempPoly = L.polygon(largestPath);
+  const center = tempPoly.getBounds().getCenter();
+  const labelIcon = L.divIcon({
+    html: `<div style="background:rgba(0,0,0,0.75);color:white;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.5;border:1.5px solid ${entry.color};pointer-events:none">
+      <div style="color:${entry.color};font-size:11px">${entry.name}</div>
+      <div style="opacity:0.9">${areaLabel}</div>
+    </div>`,
+    className: '',
+    iconAnchor: [40, 18]
   });
+  const labelMarker = L.marker(center, { icon: labelIcon, interactive: false });
 
-  entry.layer = L.layerGroup(layers).addTo(map);
+  // Group all layers + single label into one removable group
+  entry.layer = L.layerGroup([...polyLayers, labelMarker]).addTo(map);
 }
 
 // ===== CLOSE TERRITORY (merge + capture) =====
@@ -948,8 +1012,17 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('DOMContentLoaded', () => {
   buildProfileModal();
   initFirebase();
-  // reCAPTCHA init happens after Firebase is ready
   setTimeout(initRecaptcha, 500);
+
+  // ===== AUTO-LOGIN: restore session from localStorage =====
+  const savedUid = localStorage.getItem('tw_uid');
+  const savedPhone = localStorage.getItem('tw_phone');
+  if (savedUid && savedPhone) {
+    currentPhone = savedPhone;
+    state.userId = savedUid;
+    // Auto-load user — skips login screen if returning user
+    loadUserFromFirebase(savedUid);
+  }
 });
 
 // ===== DEMO MODE =====
