@@ -17,6 +17,11 @@ const FIREBASE_CONFIG = {
   measurementId: "G-FD91RY4Q1M"
 };
 
+// ===== APP VERSION =====
+// Bump this number every time you deploy new changes
+// App will auto-clear cache and force fresh login when version changes
+const APP_VERSION = '1.5';
+
 // ===== CONSTANTS =====
 const AVATARS = [
   '🤠','🦸','🕵️','👩‍💼','👨‍🚀',  // human: cowboy, superhero, detective, corporate, astronaut
@@ -280,13 +285,21 @@ function saveMergedTerritoryToFirebase() {
 // ===== FIREBASE: LISTEN TO OTHER USERS =====
 function listenToOtherUsers() {
   if (!db) return;
+
+  // First load all users to get their steps
+  const userStepsMap = {};
+  db.ref('users').once('value').then(snap => {
+    snap.forEach(child => { userStepsMap[child.key] = child.val().steps || 0; });
+  });
+
   db.ref('territories').on('value', snapshot => {
     const allTerritories = snapshot.val() || {};
     Object.entries(allTerritories).forEach(([uid, polygons]) => {
       if (uid === state.userId) return; // skip self
+      const rivalSteps = userStepsMap[uid] || 0;
       Object.values(polygons).forEach(poly => {
         if (poly && poly.path && poly.color && poly.name) {
-          registerRivalTerritory(uid, poly.name, poly.color, poly.path);
+          registerRivalTerritory(uid, poly.name, poly.color, poly.path, rivalSteps);
         }
       });
     });
@@ -297,6 +310,13 @@ function listenToOtherUsers() {
     const users = [];
     snapshot.forEach(child => users.push({ uid: child.key, ...child.val() }));
     users.reverse();
+    // Store steps in territoryStore so polygon labels can show them
+    users.forEach(u => {
+      if (u.uid !== state.userId && territoryStore[u.uid]) {
+        territoryStore[u.uid].steps = u.steps || 0;
+        redrawTerritory(u.uid);
+      }
+    });
     renderFirebaseLeaderboard(users);
   });
 }
@@ -361,6 +381,26 @@ function createProfile() {
   showNotif('Welcome ' + name + '! Walk to claim your ground 🗺️');
 }
 
+function logout() {
+  // Clear all session data
+  localStorage.removeItem('tw_uid');
+  localStorage.removeItem('tw_phone');
+  localStorage.removeItem('tw_user');
+  // Clear territory cache
+  if (state.userId) localStorage.removeItem('tw_geojson_' + state.userId);
+  // Stop all watchers
+  if (gpsWatcher) { navigator.geolocation.clearWatch(gpsWatcher); gpsWatcher = null; }
+  if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
+  if (decayInterval) { clearInterval(decayInterval); decayInterval = null; }
+  // Reset state
+  state.user = null;
+  state.userId = null;
+  state.walking = false;
+  currentPhone = '';
+  // Reload page fresh
+  window.location.reload();
+}
+
 function updateHeaderUI() {
   document.getElementById('headerAvatar').innerHTML = state.user.avatar;
   document.getElementById('headerAvatar').style.background = state.user.color + '33';
@@ -400,8 +440,10 @@ function initMap(onReady) {
       state.gpsLocked = true;
       map.setView([lat, lng], 17);
       placeUserMarker(lat, lng);
-      updateGpsStatus('locked', 'GPS Locked ✓');
+      updateGpsStatus('locked', 'GPS Locked — auto-walk ON ✓');
       addDemoTerritories();
+      startAutoWalkGPS(); // auto-detect walking from now on
+      showNotif('📍 GPS ready! Walk and territory claims automatically 🚶');
       if (onReady) onReady();
     },
     () => {
@@ -412,6 +454,7 @@ function initMap(onReady) {
       map.setView([lat, lng], 16);
       placeUserMarker(lat, lng);
       updateGpsStatus('searching', 'GPS unavailable — using Delhi');
+      document.getElementById('walkBtn').style.display = 'block'; // manual only without GPS
       showNotif('📍 Enable location for real GPS tracking');
       addDemoTerritories();
       if (onReady) onReady();
@@ -496,43 +539,78 @@ function generatePolygon(cLat, cLng, size, pts) {
 }
 
 // ===== WALK =====
-function toggleWalk() { state.walking ? stopWalk() : startWalk(); }
+// ===== AUTO-WALK DETECTION =====
+// GPS speed > 0.8 m/s = walking detected, auto starts
+// 30 seconds of no movement = auto stops and saves territory
+let stillTimer = null;
+const WALK_SPEED_MS = 0.8;    // metres/sec — normal walking pace
+const STILL_TIMEOUT = 30000;  // 30 sec still = stop walk
 
-function startWalk() {
+function startAutoWalkGPS() {
+  if (gpsWatcher) return; // already watching
+  gpsWatcher = navigator.geolocation.watchPosition(
+    pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const speed = pos.coords.speed || 0;
+
+      state.currentLat = lat;
+      state.currentLng = lng;
+
+      // Always update marker position
+      if (state.user) placeUserMarker(lat, lng);
+      if (map) map.panTo([lat, lng]);
+
+      if (speed >= WALK_SPEED_MS) {
+        // Moving — clear still timer
+        if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
+
+        // Auto start walk if not already walking
+        if (!state.walking) startWalk(true);
+
+        // Record path point
+        addWalkPoint(lat, lng);
+        state.steps += estimateSteps(speed);
+        state.distance += speed * 2 / 1000; // approx km per GPS update
+        updateStats();
+
+      } else if (state.walking) {
+        // Slowing down — start still timer
+        if (!stillTimer) {
+          stillTimer = setTimeout(() => {
+            stopWalk();
+            stillTimer = null;
+          }, STILL_TIMEOUT);
+        }
+      }
+    },
+    err => console.warn('GPS error:', err),
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+}
+
+function toggleWalk() { state.walking ? stopWalk() : startWalk(false); }
+
+function startWalk(auto = false) {
   state.walking = true;
-  state.walkPath = [];
-  state.sessionGain = 0;
+  state.walkPath = state.walkPath.length ? state.walkPath : [];
+  state.sessionGain = state.sessionGain || 0;
 
   document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
   document.getElementById('walkBtn').classList.add('active');
   document.getElementById('walkingHud').classList.add('visible');
   document.getElementById('statusBadge').textContent = '🔴 WALKING';
-  // Refresh avatar marker with walking animation
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
-  // Real GPS tracking
-  if (navigator.geolocation && state.gpsLocked) {
-    gpsWatcher = navigator.geolocation.watchPosition(
-      pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        state.currentLat = lat;
-        state.currentLng = lng;
-        addWalkPoint(lat, lng);
-        placeUserMarker(lat, lng);
-        map.panTo([lat, lng]);
-        state.steps += estimateSteps(pos.coords.speed);
-        state.distance += 0.001;
-        updateStats();
-      },
-      null,
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
-    );
-    showNotif('Real GPS active — start walking! 🚶');
+  if (!auto) {
+    if (state.gpsLocked) {
+      showNotif('Walk started! GPS tracking your path 🚶');
+    } else {
+      simulateWalk();
+      showNotif('Demo mode active 🗺️');
+    }
   } else {
-    // Demo simulation fallback
-    simulateWalk();
-    showNotif('Demo mode — tap map to trace path 🗺️');
+    showNotif('🚶 Walking detected! Claiming territory...');
   }
 }
 
@@ -541,7 +619,7 @@ function stopWalk() {
   state.lastActivity = Date.now();
   state.health = Math.min(100, state.health + 20);
 
-  if (gpsWatcher) navigator.geolocation.clearWatch(gpsWatcher);
+  if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
   if (walkInterval) clearInterval(walkInterval);
   if (state.walkPath.length > 2) { closeTerritory(); state.walkPath = []; }
 
@@ -549,7 +627,6 @@ function stopWalk() {
   document.getElementById('walkBtn').classList.remove('active');
   document.getElementById('walkingHud').classList.remove('visible');
   document.getElementById('statusBadge').textContent = '🟢 READY';
-  // Refresh avatar marker — stop walking animation
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   updateStats();
@@ -557,7 +634,10 @@ function stopWalk() {
   persistState();
   saveUserToFirebase();
   saveMergedTerritoryToFirebase();
-  showNotif(`Walk done! +${state.sessionGain} m² claimed 🎉`);
+  const gained = state.sessionGain;
+  state.sessionGain = 0;
+  if (gained > 0) showNotif(`Walk done! +${gained} m² claimed 🎉`);
+  else showNotif('Walk stopped. Keep walking to claim territory! 🗺️');
 }
 
 function estimateSteps(speed) {
@@ -668,13 +748,19 @@ function redrawTerritory(uid) {
   const largestPath = paths.reduce((a, b) => a.length >= b.length ? a : b, paths[0]);
   const tempPoly = L.polygon(largestPath);
   const center = tempPoly.getBounds().getCenter();
+
+  // Steps: use live state for self, stored value for rivals
+  const stepsCount = isMe ? state.steps : (entry.steps || 0);
+  const stepsLine = `<div style="opacity:0.8;font-size:9px">${stepsCount.toLocaleString()} steps</div>`;
+
   const labelIcon = L.divIcon({
-    html: `<div style="background:rgba(0,0,0,0.75);color:white;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.5;border:1.5px solid ${entry.color};pointer-events:none">
-      <div style="color:${entry.color};font-size:11px">${entry.name}</div>
-      <div style="opacity:0.9">${areaLabel}</div>
+    html: `<div style="background:rgba(0,0,0,0.80);color:white;padding:4px 10px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;line-height:1.7;border:1.5px solid ${entry.color};pointer-events:none">
+      <div style="color:${entry.color};font-size:11px;font-weight:800">${entry.name}</div>
+      <div style="opacity:0.95">${areaLabel}</div>
+      ${stepsLine}
     </div>`,
     className: '',
-    iconAnchor: [40, 18]
+    iconAnchor: [40, 24]
   });
   const labelMarker = L.marker(center, { icon: labelIcon, interactive: false });
 
@@ -831,12 +917,14 @@ function restoreTerritoryFromLocal(uid) {
 }
 
 // Register a rival's territory into the store (called from Firebase listener)
-function registerRivalTerritory(uid, name, color, path) {
+function registerRivalTerritory(uid, name, color, path, steps = 0) {
   if (uid === state.userId) return;
   try {
     const newGeoJSON = pathToGeoJSON(path);
     if (!territoryStore[uid]) {
-      territoryStore[uid] = { uid, name, color, geojson: null, layer: null };
+      territoryStore[uid] = { uid, name, color, geojson: null, layer: null, steps };
+    } else {
+      territoryStore[uid].steps = steps; // update steps if already exists
     }
     if (territoryStore[uid].geojson) {
       territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeoJSON);
@@ -890,6 +978,8 @@ function updateStats() {
   document.getElementById('statCaptures').textContent = state.captures;
   document.getElementById('hudDist').textContent = state.distance.toFixed(2) + ' km';
   document.getElementById('hudTerritory').textContent = '+' + state.sessionGain + ' m²';
+  // Refresh polygon label so steps count updates live on map
+  if (state.userId && territoryStore[state.userId]) redrawTerritory(state.userId);
 }
 
 function formatNum(n) {
@@ -1014,23 +1104,25 @@ document.addEventListener('DOMContentLoaded', () => {
   initFirebase();
   setTimeout(initRecaptcha, 500);
 
-  // ===== AUTO-LOGIN: restore session from localStorage =====
-  // Clear any legacy keys from old app versions
-  const legacyUser = localStorage.getItem('tw_user');
-  if (legacyUser) {
-    localStorage.removeItem('tw_user');
-    localStorage.removeItem('tw_uid');
-    localStorage.removeItem('tw_phone');
-    // Force show login screen fresh
+  // ===== VERSION CHECK — clears cache if app was updated =====
+  const storedVersion = localStorage.getItem('tw_version');
+  if (storedVersion !== APP_VERSION) {
+    // New version detected — clear all local storage and force fresh login
+    console.log(`New version detected: ${storedVersion} → ${APP_VERSION}. Clearing cache...`);
+    localStorage.clear();
+    localStorage.setItem('tw_version', APP_VERSION);
     document.getElementById('loginModal').classList.add('open');
-  } else {
-    const savedUid = localStorage.getItem('tw_uid');
-    const savedPhone = localStorage.getItem('tw_phone');
-    if (savedUid && savedPhone) {
-      currentPhone = savedPhone;
-      state.userId = savedUid;
-      loadUserFromFirebase(savedUid);
-    }
+    showNotif('App updated! Please log in again 🔄');
+    return; // stop here, show login screen
+  }
+
+  // ===== AUTO-LOGIN: restore session from localStorage =====
+  const savedUid = localStorage.getItem('tw_uid');
+  const savedPhone = localStorage.getItem('tw_phone');
+  if (savedUid && savedPhone) {
+    currentPhone = savedPhone;
+    state.userId = savedUid;
+    loadUserFromFirebase(savedUid);
   }
 });
 
