@@ -478,15 +478,43 @@ function getAvatarSVG(avatarName) {
   return `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" fill="${state.user ? state.user.color : '#00e5a0'}"/></svg>`;
 }
 
+// Inject walk keyframes into document head once — Leaflet strips <style> inside divIcon
+(function ensureWalkKeyframes() {
+  if (document.getElementById('tw-walk-keyframes')) return;
+  const s = document.createElement('style');
+  s.id = 'tw-walk-keyframes';
+  s.textContent = `
+    @keyframes twWalkLeg{0%,100%{transform:rotate(0deg)}25%{transform:rotate(25deg)}75%{transform:rotate(-25deg)}}
+    @keyframes twWalkArm{0%,100%{transform:rotate(0deg)}25%{transform:rotate(20deg)}75%{transform:rotate(-20deg)}}
+    @keyframes twBounce{0%,100%{transform:translateY(0px)}50%{transform:translateY(-4px)}}
+    .tw-walking-leg-l{transform-origin:50% 0%;animation:twWalkLeg 0.45s ease-in-out infinite !important;}
+    .tw-walking-leg-r{transform-origin:50% 0%;animation:twWalkLeg 0.45s ease-in-out infinite reverse !important;}
+    .tw-walking-arm-l{transform-origin:50% 0%;animation:twWalkArm 0.45s ease-in-out infinite reverse !important;}
+    .tw-walking-arm-r{transform-origin:50% 0%;animation:twWalkArm 0.45s ease-in-out infinite !important;}
+    .tw-walking-body{animation:twBounce 0.45s ease-in-out infinite !important;}
+  `;
+  document.head.appendChild(s);
+})();
+
 function placeUserMarker(lat, lng) {
   const name = state.user ? state.user.name : 'You';
   const isWalking = state.walking;
-  const svgContent = getAvatarSVG(state.user ? state.user.avatar : '');
-  const walkClass = isWalking ? 'tw-avatar-walking' : '';
+  let svgContent = getAvatarSVG(state.user ? state.user.avatar : '');
+
+  if (isWalking) {
+    // Replace tw- class names with animated class names (injected into document head above)
+    svgContent = svgContent
+      .replace(/class="tw-leg-left"/g,  'class="tw-walking-leg-l"')
+      .replace(/class="tw-leg-right"/g, 'class="tw-walking-leg-r"')
+      .replace(/class="tw-arm-left"/g,  'class="tw-walking-arm-l"')
+      .replace(/class="tw-arm-right"/g, 'class="tw-walking-arm-r"');
+  }
+
+  const bodyClass = isWalking ? 'tw-walking-body' : '';
 
   const icon = L.divIcon({
     html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;filter:drop-shadow(0 0 6px ${state.user.color})">
-      <div class="${walkClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center">${svgContent}</div>
+      <div class="${bodyClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center;">${svgContent}</div>
       <div style="background:rgba(0,0,0,0.8);color:white;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color}">${name}</div>
     </div>`,
     iconSize: [72, 92], iconAnchor: [36, 72], className: ''
@@ -507,14 +535,23 @@ function generatePolygon(cLat, cLng, size, pts) {
 // ===== AUTO-WALK DETECTION =====
 // GPS speed > 0.8 m/s = walking detected, auto starts
 // Speed thresholds
-const WALK_SPEED_MIN = 0.8;   // m/s — min speed to count as walking (~3 km/h)
-const WALK_SPEED_MAX = 6.0;   // m/s — max walking speed (~21 km/h). Above = vehicle, ignored
+const WALK_SPEED_MIN = 0.3;   // m/s — very low, catches indoor GPS drift walking
+const WALK_SPEED_MAX = 6.0;   // m/s — above this = vehicle (~21 km/h)
+const WALK_DIST_MIN  = 0.8;   // metres between GPS pings — sensitive for indoor coverage
 const STILL_TIMEOUT  = 30000; // 30 sec still = auto stop walk
 
 let stillTimer = null;
+let lastGPSLat = null, lastGPSLng = null;
 
-function isVehicleSpeed(speed) {
-  return speed > WALK_SPEED_MAX; // car, bike, auto, train etc
+function isVehicleSpeed(speed) { return speed > WALK_SPEED_MAX; }
+
+// Haversine distance in metres between two coords
+function gpsDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 function startAutoWalkGPS() {
@@ -533,18 +570,26 @@ function startAutoWalkGPS() {
       if (map) map.panTo([lat, lng]);
 
       // ===== VEHICLE CHECK — ignore completely if in car/bike =====
-      if (isVehicleSpeed(speed)) {
-        // In a vehicle — stop walk if active, show badge, do nothing else
+      // Distance moved since last GPS ping (works indoors when speed=0)
+      const distMoved = (lastGPSLat !== null)
+        ? gpsDistance(lastGPSLat, lastGPSLng, lat, lng) : 0;
+      lastGPSLat = lat; lastGPSLng = lng;
+
+      // Vehicle check — distance too large for walking AND speed confirms it
+      if (isVehicleSpeed(speed) && distMoved > 20) {
         if (state.walking) {
           stopWalk();
           showNotif('🚗 Vehicle detected — walk tracking paused');
         }
         document.getElementById('statusBadge').textContent = '🚗 IN VEHICLE';
-        return; // skip all step/territory counting
+        return;
       }
 
-      if (speed >= WALK_SPEED_MIN) {
-        // Walking/jogging speed — clear still timer
+      // Detect walking via speed OR distance moved between pings
+      const isWalkingNow = speed >= WALK_SPEED_MIN || distMoved >= WALK_DIST_MIN;
+
+      if (isWalkingNow) {
+        // Moving — clear still timer
         if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
 
         // Auto start walk if not already walking
@@ -552,12 +597,12 @@ function startAutoWalkGPS() {
 
         // Record path + count steps
         addWalkPoint(lat, lng);
-        state.steps += estimateSteps(speed);
-        state.distance += speed * 2 / 1000;
+        state.steps += estimateSteps(speed || (distMoved / 2)); // fallback if speed=0
+        state.distance += Math.max(speed * 2, distMoved) / 1000;
         updateStats();
 
       } else if (state.walking) {
-        // Slowing down / standing — start still timer
+        // Not moving — start still timer
         if (!stillTimer) {
           stillTimer = setTimeout(() => {
             stopWalk();
@@ -585,7 +630,8 @@ function startWalk(auto = false) {
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   if (!auto) {
-    showNotif('Walk started! Move outside for GPS tracking 🚶');
+    // Manual start — force record GPS points even indoors with weak signal
+    showNotif('Walk started! Every step counts — indoors or outdoors 🚶');
   } else {
     showNotif('🚶 Walking detected! Claiming territory...');
   }
@@ -700,15 +746,8 @@ function redrawTerritory(uid) {
   // Label at center of EVERY polygon — no box, just text in player's color
   const stepsCount = isMe ? state.steps : (entry.steps || 0);
 
-  // Darken the player color for bold readable text (multiply hex channels by 0.7)
-  function darkenColor(hex) {
-    const c = hex.replace('#','');
-    const r = Math.floor(parseInt(c.slice(0,2),16) * 0.65);
-    const g = Math.floor(parseInt(c.slice(2,4),16) * 0.65);
-    const b = Math.floor(parseInt(c.slice(4,6),16) * 0.65);
-    return `rgb(${r},${g},${b})`;
-  }
-  const textColor = darkenColor(entry.color);
+  // Use exact border color with fluorescent glow — same vivid color as polygon border
+  const textColor = entry.color;
 
   const labelMarkers = paths.map(path => {
     const center = L.polygon(path).getBounds().getCenter();
@@ -718,11 +757,11 @@ function redrawTerritory(uid) {
           text-align:center;
           line-height:1.6;
           white-space:nowrap;
-          text-shadow: none;
+          text-shadow: 0 0 8px ${entry.color}, 0 0 2px rgba(0,0,0,0.9);
         ">
           <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}</div>
           <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
-          <div style="font-size:9px;font-weight:600;color:${textColor};opacity:0.85">${stepsCount.toLocaleString()} steps</div>
+          <div style="font-size:9px;font-weight:600;color:${textColor}">${stepsCount.toLocaleString()} steps</div>
         </div>`,
       className: '',
       iconAnchor: [40, 24]
