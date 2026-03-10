@@ -541,30 +541,44 @@ function pathToGeoJSON(path) {
 
 // Convert GeoJSON polygon coords back to [[lat,lng],...] for Leaflet
 function geojsonToLeaflet(geojson) {
-  const type = geojson.geometry.type;
-  if (type === 'Polygon') {
-    return [geojson.geometry.coordinates[0].map(c => [c[1], c[0]])];
-  } else if (type === 'MultiPolygon') {
-    return geojson.geometry.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
+  // Safely get geometry whether it's a Feature or raw geometry
+  const geometry = geojson.geometry || geojson;
+  if (!geometry || !geometry.type) return [];
+
+  if (geometry.type === 'Polygon') {
+    // Each ring: outer boundary is index 0
+    return [geometry.coordinates[0].map(c => [c[1], c[0]])];
+  } else if (geometry.type === 'MultiPolygon') {
+    // Each sub-polygon's outer ring
+    return geometry.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
   }
   return [];
 }
 
-// Redraw territory for a uid from their stored GeoJSON
+// Redraw territory for a uid — always removes old layer first, draws fresh from GeoJSON
 function redrawTerritory(uid) {
   const entry = territoryStore[uid];
   if (!entry) return;
-  if (entry.layer) { map.removeLayer(entry.layer); entry.layer = null; }
+
+  // Always remove existing layer cleanly
+  if (entry.layer) {
+    map.removeLayer(entry.layer);
+    entry.layer = null;
+  }
+
+  // Nothing to draw if no geojson or null (fully captured)
   if (!entry.geojson) return;
 
   const isMe = uid === state.userId;
   const paths = geojsonToLeaflet(entry.geojson);
+  if (!paths.length) return;
+
   const layers = paths.map(path =>
     L.polygon(path, {
       color: entry.color,
       fillColor: entry.color,
-      fillOpacity: isMe ? 0.4 : 0.25,
-      weight: isMe ? 2.5 : 1.5,
+      fillOpacity: isMe ? 0.45 : 0.25,
+      weight: isMe ? 3 : 1.5,
       smoothFactor: 1
     })
   );
@@ -599,36 +613,36 @@ function closeTerritory() {
       const intersection = turf.intersect(newGeoJSON, rival.geojson);
       if (!intersection) return; // no overlap
 
-      // Calculate captured area in m²
       const capturedM2 = Math.floor(turf.area(intersection));
-      if (capturedM2 < 1) return;
+      if (capturedM2 < 10) return; // ignore tiny overlaps
 
-      // Subtract captured area from rival
+      // Subtract captured area from rival — null means fully consumed
       const remaining = turf.difference(rival.geojson, newGeoJSON);
-      rival.geojson = remaining; // null if fully consumed
-      redrawTerritory(rivalUid);
+      rival.geojson = remaining || null;
+      redrawTerritory(rivalUid); // redraw rival with reduced territory
 
-      // Add captured area to user's stats
       state.territory += capturedM2;
       state.sessionGain += capturedM2;
       state.captures++;
-
       showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
     } catch(e) { console.warn('Capture error:', e); }
   });
 
-  // ---- MERGE: union new polygon into user's existing territory ----
+  // ---- MERGE: union new walk polygon into user's existing territory ----
   try {
     if (territoryStore[uid].geojson) {
       const merged = turf.union(territoryStore[uid].geojson, newGeoJSON);
-      territoryStore[uid].geojson = merged;
+      if (merged) {
+        territoryStore[uid].geojson = merged;
+      } else {
+        territoryStore[uid].geojson = newGeoJSON;
+      }
     } else {
       territoryStore[uid].geojson = newGeoJSON;
     }
   } catch(e) {
-    // Fallback: just set as new polygon if union fails
+    console.warn('Union error — using new polygon as fallback:', e);
     territoryStore[uid].geojson = newGeoJSON;
-    console.warn('Union error:', e);
   }
 
   // Add new walk area to stats
@@ -636,11 +650,13 @@ function closeTerritory() {
   state.territory += realArea;
   state.sessionGain += realArea;
 
+  // Redraw user territory as one clean merged polygon
   redrawTerritory(uid);
   persistTerritoryStore(uid);
   saveTerritoryToFirebase(newPath);
   saveMergedTerritoryToFirebase();
 
+  // Clear the walk trail line
   if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
 
   const flash = document.getElementById('captureFlash');
