@@ -116,14 +116,16 @@
         <span id="gpsLabel" style="color:var(--text-dim);font-size:12px">Waiting for GPS...</span>
       </div>
 
+      <!-- LIFETIME STATS -->
+      <div class="stats-section-label">🏆 Lifetime Stats</div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="statTerritory">0</div>
-          <div class="stat-label">m² Territory</div>
+          <div class="stat-label">Area Covered</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statSteps">0</div>
-          <div class="stat-label">Steps Today</div>
+          <div class="stat-label">Steps Taken</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statDist">0.0</div>
@@ -131,6 +133,27 @@
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statCaptures">0</div>
+          <div class="stat-label">Captures</div>
+        </div>
+      </div>
+
+      <!-- TODAY STATS -->
+      <div class="stats-section-label" style="margin-top:12px">📅 Today's Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statTodayTerritory">0</div>
+          <div class="stat-label">Area Covered</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statTodaySteps">0</div>
+          <div class="stat-label">Steps Taken</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statTodayDist">0.0</div>
+          <div class="stat-label">km Walked</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statTodayCaptures">0</div>
           <div class="stat-label">Captures</div>
         </div>
       </div>
