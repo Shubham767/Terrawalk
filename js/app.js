@@ -80,6 +80,7 @@ let state = {
 };
 
 let map, userMarker, currentPolyline;
+let currentHeading = 0; // degrees: 0=north/right, 90=south, 180=west (flipped)
 let walkInterval, decayInterval, gpsWatcher;
 let db = null; // Firebase database reference
 let deferredInstallPrompt = null;
@@ -222,7 +223,7 @@ function restoreTerritoryFromFirebase(uid) {
       try {
         const geojson = JSON.parse(data.geojson);
         if (!territoryStore[uid]) {
-          territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
+          territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, zoneName: state.user.zoneName || '', geojson: null, layer: null };
         }
         territoryStore[uid].geojson = geojson;
         redrawTerritory(uid);
@@ -420,10 +421,215 @@ function logout() {
   window.location.reload();
 }
 
+// ===== PROFILE MENU =====
+function toggleProfileMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('profileMenu');
+  menu.classList.toggle('open');
+  if (menu.classList.contains('open')) updateProfileMenu();
+}
+function closeProfileMenu() {
+  document.getElementById('profileMenu').classList.remove('open');
+}
+document.addEventListener('click', e => {
+  if (!document.getElementById('profileMenu').contains(e.target) &&
+      !document.getElementById('profileChip').contains(e.target)) {
+    closeProfileMenu();
+  }
+});
+function updateProfileMenu() {
+  if (!state.user) return;
+  document.getElementById('pmColorSwatch').style.background = state.user.color;
+  document.getElementById('pmZoneName').textContent = state.user.zoneName || '';
+  document.getElementById('pmWalkGoal').textContent = formatNum(state.user.walkGoal || 5000) + ' steps';
+  document.getElementById('pmBio').textContent = state.user.bio || 'Tap to add your bio...';
+}
+
+// ===== EDIT NICKNAME =====
+function openEditName() {
+  closeProfileMenu();
+  showMiniModal('✏️ Edit Nickname', `
+    <input id="mmInput" type="text" maxlength="20" placeholder="Your nickname" value="${state.user.name}"/>
+  `, () => {
+    const val = document.getElementById('mmInput').value.trim();
+    if (!val) return;
+    state.user.name = val;
+    saveUserToFirebase();
+    updateHeaderUI();
+    if (territoryStore[state.userId]) { territoryStore[state.userId].name = val; redrawTerritory(state.userId); }
+    showNotif('Nickname updated! ✏️');
+  });
+  setTimeout(() => document.getElementById('mmInput')?.focus(), 100);
+}
+
+// ===== EDIT BIO =====
+function openEditBio() {
+  closeProfileMenu();
+  showMiniModal('👤 Your Bio', `
+    <textarea id="mmBio" maxlength="100" placeholder="Tell others about yourself...">${state.user.bio || ''}</textarea>
+  `, () => {
+    state.user.bio = document.getElementById('mmBio').value.trim();
+    saveUserToFirebase();
+    showNotif('Bio saved! 👤');
+  });
+}
+
+// ===== COLOR PICKER =====
+const PRESET_COLORS = ['#00e5a0','#ff4b6e','#4b9fff','#ffd700','#a855f7','#ff6b2b',
+  '#00d4ff','#ff1493','#39ff14','#ff6ec7','#00ffff','#ff4500'];
+function openColorPicker() {
+  closeProfileMenu();
+  const swatches = PRESET_COLORS.map(c =>
+    `<div class="color-swatch${c===state.user.color?' selected':''}" style="background:${c}" onclick="selectColor('${c}',this)"></div>`
+  ).join('');
+  showMiniModal('🎨 Territory Color', `
+    <div class="color-grid">${swatches}</div>
+    <div class="custom-color-row">
+      <input type="color" id="mmCustomColor" value="${state.user.color}">
+      <label>Or pick any custom color</label>
+    </div>
+  `, () => {
+    const custom = document.getElementById('mmCustomColor').value;
+    const selected = document.querySelector('.color-swatch.selected');
+    const color = selected ? selected.style.background : custom;
+    state.user.color = color;
+    saveUserToFirebase();
+    updateHeaderUI();
+    if (territoryStore[state.userId]) { territoryStore[state.userId].color = color; redrawTerritory(state.userId); }
+    showNotif('Territory color updated! 🎨');
+  });
+}
+function selectColor(color, el) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('mmCustomColor').value = color;
+}
+
+// ===== ACCESSORIES =====
+const ACCESSORIES = [
+  {id:'none', emoji:'✖️', label:'None'},
+  {id:'cowboy', emoji:'🤠', label:'Cowboy'},
+  {id:'crown', emoji:'👑', label:'Crown'},
+  {id:'tophat', emoji:'🎩', label:'Top Hat'},
+  {id:'halo', emoji:'😇', label:'Halo'},
+  {id:'glasses', emoji:'🕶️', label:'Shades'},
+  {id:'cap', emoji:'🧢', label:'Cap'},
+  {id:'santa', emoji:'🎅', label:'Santa'},
+];
+function openAccessories() {
+  closeProfileMenu();
+  const cur = state.user.accessory || 'none';
+  const grid = ACCESSORIES.map(a =>
+    `<div class="acc-option${a.id===cur?' selected':''}" onclick="selectAcc('${a.id}',this)">${a.emoji}<span>${a.label}</span></div>`
+  ).join('');
+  showMiniModal('🎩 Accessories', `<div class="acc-grid">${grid}</div>`, () => {
+    const sel = document.querySelector('.acc-option.selected');
+    if (sel) {
+      state.user.accessory = sel.dataset.accId || ACCESSORIES.find(a => sel.textContent.includes(a.label))?.id || 'none';
+      saveUserToFirebase();
+      updateHeaderUI();
+      showNotif('Accessory equipped! 🎩');
+    }
+  });
+}
+function selectAcc(id, el) {
+  document.querySelectorAll('.acc-option').forEach(a => a.classList.remove('selected'));
+  el.classList.add('selected');
+  el.dataset.accId = id;
+}
+
+// ===== ZONE NAME =====
+function openZoneName() {
+  closeProfileMenu();
+  showMiniModal('📍 Name Your Zone', `
+    <input id="mmZone" type="text" maxlength="30" placeholder="e.g. The Neon District" value="${state.user.zoneName || ''}"/>
+  `, () => {
+    const val = document.getElementById('mmZone').value.trim();
+    state.user.zoneName = val;
+    saveUserToFirebase();
+    if (territoryStore[state.userId]) redrawTerritory(state.userId);
+    showNotif(val ? 'Zone named: ' + val + ' 📍' : 'Zone name cleared');
+  });
+  setTimeout(() => document.getElementById('mmZone')?.focus(), 100);
+}
+
+// ===== WALK GOAL =====
+const GOAL_PRESETS = [3000, 5000, 8000, 10000, 15000, 20000];
+function openWalkGoal() {
+  closeProfileMenu();
+  const cur = state.user.walkGoal || 5000;
+  const opts = GOAL_PRESETS.map(g =>
+    `<div class="goal-option${g===cur?' selected':''}" onclick="selectGoal(${g},this)">${g.toLocaleString()}</div>`
+  ).join('');
+  showMiniModal('🎯 Daily Walk Goal', `
+    <div class="goal-options">${opts}</div>
+    <input id="mmGoalCustom" type="number" min="500" max="50000" placeholder="Or type custom steps" style="margin-top:4px"/>
+  `, () => {
+    const sel = document.querySelector('.goal-option.selected');
+    const custom = parseInt(document.getElementById('mmGoalCustom').value);
+    const goal = custom > 0 ? custom : (sel ? parseInt(sel.textContent.replace(/,/g,'')) : 5000);
+    state.user.walkGoal = goal;
+    saveUserToFirebase();
+    updateProfileMenu();
+    showNotif('Goal set: ' + goal.toLocaleString() + ' steps 🎯');
+  });
+}
+function selectGoal(val, el) {
+  document.querySelectorAll('.goal-option').forEach(g => g.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// ===== MINI MODAL HELPER =====
+function showMiniModal(title, bodyHtml, onSave) {
+  const existing = document.getElementById('miniModalOverlay');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.className = 'mini-modal-overlay';
+  el.id = 'miniModalOverlay';
+  el.innerHTML = `
+    <div class="mini-modal">
+      <h3>${title}</h3>
+      ${bodyHtml}
+      <div class="mini-modal-btns">
+        <button class="btn-cancel" onclick="closeMiniModal()">Cancel</button>
+        <button class="btn-save" onclick="saveMiniModal()">Save</button>
+      </div>
+    </div>`;
+  el.addEventListener('click', e => { if (e.target === el) closeMiniModal(); });
+  document.body.appendChild(el);
+  el._onSave = onSave;
+}
+function closeMiniModal() {
+  const el = document.getElementById('miniModalOverlay');
+  if (el) el.remove();
+}
+function saveMiniModal() {
+  const el = document.getElementById('miniModalOverlay');
+  if (el && el._onSave) el._onSave();
+  closeMiniModal();
+}
+
+// ===== LOGOUT =====
+function logout() {
+  localStorage.removeItem('tw_uid');
+  localStorage.removeItem('tw_phone');
+  localStorage.removeItem('tw_user');
+  if (state.userId) localStorage.removeItem('tw_geojson_' + state.userId);
+  if (gpsWatcher) { navigator.geolocation.clearWatch(gpsWatcher); gpsWatcher = null; }
+  if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
+  if (decayInterval) { clearInterval(decayInterval); decayInterval = null; }
+  window.location.reload();
+}
+
 function updateHeaderUI() {
-  document.getElementById('headerAvatar').innerHTML = state.user.avatar;
-  document.getElementById('headerAvatar').style.background = state.user.color + '33';
-  document.getElementById('headerAvatar').style.fontSize = '14px';
+  const acc = state.user.accessory && state.user.accessory !== 'none'
+    ? ACCESSORIES.find(a => a.id === state.user.accessory)?.emoji || '' : '';
+  const avatarEl = document.getElementById('headerAvatar');
+  avatarEl.innerHTML = acc || '🚶';
+  avatarEl.style.background = state.user.color + '33';
+  avatarEl.style.border = '2px solid ' + state.user.color;
+  avatarEl.style.fontSize = '14px';
+  // Show only the name — clean, no extra clutter
   document.getElementById('headerName').textContent = state.user.name;
 }
 
@@ -431,6 +637,44 @@ function loadSavedProfile() {
   // Profile is now loaded from Firebase via onAuthStateChanged
   // This function is kept as no-op for compatibility
   return false;
+}
+
+// ===== DEV TOOLS =====
+function devResetProgress() {
+  if (!confirm('Reset ALL your progress? This cannot be undone.')) return;
+  if (!state.userId || !db) return;
+  db.ref('users/' + state.userId).remove();
+  db.ref('territories/' + state.userId).remove();
+  db.ref('territory_snapshot/' + state.userId).remove();
+  localStorage.removeItem('tw_uid');
+  localStorage.removeItem('tw_phone');
+  showNotif('Progress reset! Reloading...');
+  setTimeout(() => window.location.reload(), 1500);
+}
+function devSpawnRivals() {
+  if (!state.currentLat) { showNotif('Need GPS first'); return; }
+  const rivals = [
+    { name: 'Arjun', color: '#ff4b6e' },
+    { name: 'Priya', color: '#a855f7' },
+    { name: 'Karan', color: '#ffd700' },
+    { name: 'Rahul', color: '#00d4ff' },
+  ];
+  rivals.forEach((r, i) => {
+    const offLat = (Math.random() - 0.5) * 0.002;
+    const offLng = (Math.random() - 0.5) * 0.002;
+    const cLat = state.currentLat + offLat;
+    const cLng = state.currentLng + offLng;
+    const path = generatePolygon(cLat, cLng, 0.0006, 8);
+    if (!territoryStore['dev_' + i]) {
+      territoryStore['dev_' + i] = { uid: 'dev_' + i, name: r.name, color: r.color, geojson: null, layer: null, steps: Math.floor(Math.random()*5000) };
+    }
+    try {
+      const gj = pathToGeoJSON(path);
+      territoryStore['dev_' + i].geojson = gj;
+      redrawTerritory('dev_' + i);
+    } catch(e) {}
+  });
+  showNotif('4 rivals spawned nearby 👥');
 }
 
 function persistState() {
@@ -534,9 +778,22 @@ function placeUserMarker(lat, lng) {
 
   const bodyClass = isWalking ? 'tw-walking-body' : '';
 
+  // Rotate avatar based on movement direction
+  // SVG avatars face right (east=90deg). Flip horizontally if heading is westward.
+  const headingDeg = currentHeading;
+  const facingLeft = headingDeg > 90 && headingDeg < 270; // moving west-ish
+  const rotateY = facingLeft ? 'scaleX(-1)' : 'scaleX(1)';
+  // Tilt slightly for north/south movement
+  const tiltAngle = (() => {
+    if (headingDeg <= 45 || headingDeg >= 315) return -15;  // heading north
+    if (headingDeg >= 135 && headingDeg <= 225) return 15;  // heading south
+    return 0;
+  })();
+  const transform = `${rotateY} rotate(${tiltAngle}deg)`;
+
   const icon = L.divIcon({
     html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;filter:drop-shadow(0 0 6px ${state.user.color})">
-      <div class="${bodyClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center;">${svgContent}</div>
+      <div class="${bodyClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center;transform:${transform};transition:transform 0.3s ease;">${svgContent}</div>
       <div style="background:rgba(0,0,0,0.8);color:white;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color}">${name}</div>
     </div>`,
     iconSize: [72, 92], iconAnchor: [36, 72], className: ''
@@ -584,10 +841,20 @@ function startAutoWalkGPS() {
       const lng = pos.coords.longitude;
       const speed = pos.coords.speed || 0;
 
+      // Compute heading from previous position
+      if (state.currentLat !== null && state.currentLng !== null) {
+        const dLng = lng - state.currentLng;
+        const dLat = lat - state.currentLat;
+        if (Math.abs(dLat) > 0.000005 || Math.abs(dLng) > 0.000005) {
+          // atan2 gives angle from east, convert to compass bearing
+          const angle = Math.atan2(dLng, dLat) * 180 / Math.PI;
+          currentHeading = (angle + 360) % 360;
+        }
+      }
       state.currentLat = lat;
       state.currentLng = lng;
 
-      // Always update marker position
+      // Always update marker position with current heading
       if (state.user) placeUserMarker(lat, lng);
       if (map) map.panTo([lat, lng]);
 
@@ -738,6 +1005,8 @@ function geojsonToLeaflet(geojson) {
 function redrawTerritory(uid) {
   const entry = territoryStore[uid];
   if (!entry) return;
+  // Sync latest zoneName for own territory
+  if (uid === state.userId && state.user) entry.zoneName = state.user.zoneName || '';
 
   // Always remove existing layer cleanly
   if (entry.layer) {
@@ -785,7 +1054,7 @@ function redrawTerritory(uid) {
           white-space:nowrap;
           text-shadow: 0 0 8px ${entry.color}, 0 0 2px rgba(0,0,0,0.9);
         ">
-          <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}</div>
+          <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}${entry.zoneName ? ' · <span style=\'font-size:9px;font-weight:500\'>' + entry.zoneName + '</span>' : ''}</div>
           <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
           <div style="font-size:9px;font-weight:600;color:${textColor}">${stepsCount.toLocaleString()} steps</div>
         </div>`,
@@ -1084,20 +1353,38 @@ function renderLbList(id, data) {
 }
 
 // ===== ACHIEVEMENTS =====
+function toggleAchievements() {
+  document.getElementById('achievementsPanel').classList.toggle('open');
+}
+// Close achievements panel on map click
+document.addEventListener('click', e => {
+  const panel = document.getElementById('achievementsPanel');
+  const btn   = document.getElementById('achievementsOverlay');
+  if (panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) {
+    panel.classList.remove('open');
+  }
+});
+
 function checkAchievements() {
   const all = [
-    { icon: '👟', label: '100 Steps!', cond: state.steps >= 100 },
-    { icon: '🗺️', label: 'Territory Explorer', cond: state.territory >= 500 },
-    { icon: '⚔️', label: 'First Capture', cond: state.captures >= 1 },
-    { icon: '🏃', label: '0.5km Walker', cond: state.distance >= 0.5 },
-    { icon: '🔥', label: '1km Warrior', cond: state.distance >= 1 },
-    { icon: '👑', label: 'Territory King', cond: state.territory >= 5000 },
+    { icon: '👟', label: '100 Steps!',       cond: state.steps >= 100 },
+    { icon: '🗺️', label: 'Explorer',          cond: state.territory >= 500 },
+    { icon: '⚔️', label: 'First Capture',     cond: state.captures >= 1 },
+    { icon: '🏃', label: '0.5km Walker',      cond: state.distance >= 0.5 },
+    { icon: '🔥', label: '1km Warrior',       cond: state.distance >= 1 },
+    { icon: '👑', label: 'Territory King',    cond: state.territory >= 5000 },
+    { icon: '💪', label: '10k Steps',         cond: state.steps >= 10000 },
+    { icon: '🌍', label: '5km Legend',        cond: state.distance >= 5 },
   ];
   const earned = all.filter(a => a.cond);
+  // Update count badge
+  const badge = document.getElementById('achieveCount');
+  if (badge) badge.textContent = earned.length;
+  // Render list
   const el = document.getElementById('achievementsList');
   if (!el) return;
   el.innerHTML = earned.length
-    ? earned.map(a => `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;"><span style="font-size:16px">${a.icon}</span><span>${a.label}</span></div>`).join('')
+    ? earned.map(a => `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:4px"><span style="font-size:15px">${a.icon}</span><span>${a.label}</span></div>`).join('')
     : `<div style="color:var(--text-dim);font-size:12px">Walk to earn achievements!</div>`;
 }
 
