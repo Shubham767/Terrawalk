@@ -856,12 +856,4 @@ input[type="text"]:focus { border-color: var(--accent); }
   margin-bottom: 8px;
 }
 
-/* ===== DEV TOOLS (map top-left) ===== */
-.dev-tools {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  display: flex;
-  gap: 6px;
-  z-index: 900;
-}
+
