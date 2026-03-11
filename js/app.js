@@ -23,12 +23,7 @@ const FIREBASE_CONFIG = {
 const APP_VERSION = '1.5';
 
 // ===== CONSTANTS =====
-const AVATARS = [
-  '🤠','🦸','🕵️','👩‍💼','👨‍🚀',  // human: cowboy, superhero, detective, corporate, astronaut
-  '👦','🧙','🥷','👩‍🔬','🤴',       // human: kid, wizard, ninja, scientist, prince
-  '🐺','🦊','🐻','🦁','🐯',         // animals: wolf, fox, bear, lion, tiger
-  '🦅','🐘','🦓','🦒','🐆'          // animals: eagle, elephant, zebra, giraffe, leopard
-];
+// (legacy AVATARS array removed)
 const AVATAR_NAMES = [
   "Person","Man","Woman",
   "Penguin","Owl","Duck","Eagle","Turtle","Octopus","Crab","Lobster","Dolphin","Shark",
@@ -69,6 +64,8 @@ let state = {
   health: 100,
   walkPath: [],
   sessionGain: 0,
+  sessionDist: 0,    // km walked this session only
+  sessionSteps: 0,   // steps this session only
   lastActivity: Date.now(),
   gpsLocked: false,
   currentLat: null,
@@ -79,7 +76,8 @@ let state = {
 let map, userMarker, currentPolyline;
 let currentHeading = 0;
 // demo state
-if (!state.demoRunning) state.demoRunning = false; // degrees: 0=north/right, 90=south, 180=west (flipped)
+let demoRunning = false;
+let demoInterval = null;
 let walkInterval, decayInterval, gpsWatcher;
 let db = null; // Firebase database reference
 let deferredInstallPrompt = null;
@@ -167,7 +165,18 @@ function loadUserFromFirebase(uid) {
     const data = snap.val();
     if (data && data.name) {
       // Returning user — restore their profile & stats
-      state.user = { name: data.name, avatar: data.avatar, color: data.color, city: data.city };
+      state.user = {
+        name:      data.name,
+        avatar:    data.avatar,
+        color:     data.color,
+        city:      data.city,
+        bio:       data.bio || '',
+        accessory: data.accessory || 'none',
+        zoneName:  data.zoneName || '',
+        walkGoal:  data.walkGoal || 5000,
+      };
+      state.sessionDist  = 0;
+      state.sessionSteps = 0;
       state.territory = data.territory || 0;
       state.steps = data.steps || 0;
       state.distance = data.distance || 0;
@@ -258,18 +267,27 @@ function restoreTerritoryFromFirebase(uid) {
 
 // ===== FIREBASE: SAVE USER DATA =====
 function saveUserToFirebase() {
-  if (!db || !state.userId) return;
+  if (!db || !state.userId || !state.user) return;
   db.ref(`users/${state.userId}`).set({
     name: state.user.name,
     avatar: state.user.avatar,
     color: state.user.color,
     city: state.user.city,
+    bio: state.user.bio || '',
+    accessory: state.user.accessory || 'none',
+    zoneName: state.user.zoneName || '',
+    walkGoal: state.user.walkGoal || 5000,
     territory: state.territory,
     steps: state.steps,
     distance: parseFloat(state.distance.toFixed(2)),
     captures: state.captures,
     health: state.health,
     lastActivity: state.lastActivity,
+    todayTerritory: state.todayTerritory || 0,
+    todaySteps: state.todaySteps || 0,
+    todayDistance: parseFloat((state.todayDistance || 0).toFixed(2)),
+    todayCaptures: state.todayCaptures || 0,
+    todayDate: state.todayDate || new Date().toDateString(),
     updatedAt: Date.now()
   });
 }
@@ -311,16 +329,23 @@ function listenToOtherUsers() {
     snap.forEach(child => { userStepsMap[child.key] = child.val().steps || 0; });
   });
 
-  db.ref('territories').on('value', snapshot => {
-    const allTerritories = snapshot.val() || {};
-    Object.entries(allTerritories).forEach(([uid, polygons]) => {
-      if (uid === state.userId) return; // skip self
-      const rivalSteps = userStepsMap[uid] || 0;
-      Object.values(polygons).forEach(poly => {
-        if (poly && poly.path && poly.color && poly.name) {
-          registerRivalTerritory(uid, poly.name, poly.color, poly.path, rivalSteps);
+  // Load rival territories via snapshot (fast, one merged polygon per user)
+  db.ref('territory_snapshot').on('value', snapshots => {
+    snapshots.forEach(child => {
+      const uid = child.key;
+      if (uid === state.userId) return;
+      const data = child.val();
+      if (!data || !data.geojson) return;
+      try {
+        const geojson = JSON.parse(data.geojson);
+        const rivalSteps = userStepsMap[uid] || 0;
+        if (!territoryStore[uid]) {
+          territoryStore[uid] = { uid, name: data.name, color: data.color, geojson: null, layer: null, steps: rivalSteps };
         }
-      });
+        territoryStore[uid].geojson = geojson;
+        territoryStore[uid].steps   = rivalSteps;
+        redrawTerritory(uid);
+      } catch(e) { console.warn('Rival snapshot error:', e); }
     });
   });
 
@@ -400,25 +425,7 @@ function createProfile() {
   showNotif('Welcome ' + name + '! Walk to claim your ground 🗺️');
 }
 
-function logout() {
-  // Clear all session data
-  localStorage.removeItem('tw_uid');
-  localStorage.removeItem('tw_phone');
-  localStorage.removeItem('tw_user');
-  // Clear territory cache
-  if (state.userId) localStorage.removeItem('tw_geojson_' + state.userId);
-  // Stop all watchers
-  if (gpsWatcher) { navigator.geolocation.clearWatch(gpsWatcher); gpsWatcher = null; }
-  if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
-  if (decayInterval) { clearInterval(decayInterval); decayInterval = null; }
-  // Reset state
-  state.user = null;
-  state.userId = null;
-  state.walking = false;
-  currentPhone = '';
-  // Reload page fresh
-  window.location.reload();
-}
+// logout() defined below in profile section
 
 // ===== PROFILE MENU =====
 function toggleProfileMenu(e) {
@@ -652,7 +659,11 @@ function devResetProgress() {
   setTimeout(() => window.location.reload(), 1500);
 }
 function devSpawnRivals() {
-  if (!state.currentLat) { showNotif('Need GPS first'); return; }
+  if (!map) { showNotif('Map not ready'); return; }
+  if (!state.currentLat) {
+    state.currentLat = map.getCenter().lat;
+    state.currentLng = map.getCenter().lng;
+  }
   const rivals = [
     { name: 'Arjun', color: '#ff4b6e' },
     { name: 'Priya', color: '#a855f7' },
@@ -679,68 +690,104 @@ function devSpawnRivals() {
 
 function devDemoWalk() {
   if (!state.user) { showNotif('Login first'); return; }
-  if (!map) { showNotif('Map not ready'); return; }
-  if (state.demoRunning) {
-    // Stop demo
-    clearInterval(state.demoInterval);
-    state.demoRunning = false;
-    stopWalk();
+  if (!map)        { showNotif('Map not ready'); return; }
+
+  // ---- STOP ----
+  if (demoRunning) {
+    demoRunning = false;
+    clearInterval(demoInterval);
+    demoInterval = null;
+    // Manually reset walk state without triggering GPS logic
+    state.walking     = false;
+    state.sessionDist  = 0;
+    state.sessionSteps = 0;
+    if (state.walkPath.length > 2) { closeTerritory(); }
+    state.walkPath = [];
+    if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+    document.getElementById('walkBtn').textContent = '▶ START WALK';
+    document.getElementById('walkBtn').classList.remove('active');
+    document.getElementById('walkingHud').classList.remove('visible');
+    document.getElementById('statusBadge').textContent = '🟢 READY';
     document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
-    showNotif('Demo walk stopped');
+    if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
+    showNotif('Demo stopped');
     return;
   }
 
-  // Start from current GPS or map center
-  const center = state.currentLat
-    ? { lat: state.currentLat, lng: state.currentLng }
-    : { lat: map.getCenter().lat, lng: map.getCenter().lng };
+  // ---- START ----
+  const cLat = state.currentLat || map.getCenter().lat;
+  const cLng = state.currentLng || map.getCenter().lng;
 
-  state.currentLat = center.lat;
-  state.currentLng = center.lng;
+  // Manually activate walk UI without calling startWalk() (avoids GPS interference)
+  state.walking   = true;
+  state.walkPath  = [];
+  state.sessionGain = 0;
+  if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+  document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
+  document.getElementById('walkBtn').classList.add('active');
+  document.getElementById('walkingHud').classList.add('visible');
+  document.getElementById('statusBadge').textContent = '🔴 WALKING';
 
-  // Build a circular walk path around current location
-  const R = 0.0008; // ~80m radius
-  const totalSteps = 60;
-  let step = 0;
-  state.demoRunning = true;
+  demoRunning = true;
   document.getElementById('devDemoBtn').textContent = '⏹ Stop Demo';
-  startWalk(true);
-  showNotif('🎮 Demo walk started — watch territory form!');
+  showNotif('🎮 Demo walk started!');
 
-  state.demoInterval = setInterval(() => {
-    if (!state.demoRunning) return;
-    // Walk in a figure-8 pattern
-    const t = (step / totalSteps) * 2 * Math.PI;
-    const lat = center.lat + R * Math.sin(t);
-    const lng = center.lng + R * Math.sin(t) * Math.cos(t);
+  const R     = 0.0007; // ~70m radius
+  const TOTAL = 80;
+  let step    = 0;
 
-    // Compute heading
-    if (state.currentLat !== null) {
-      const dLng = lng - state.currentLng;
-      const dLat = lat - state.currentLat;
-      currentHeading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
-    }
+  // Seed position
+  state.currentLat = cLat + R; // start at top of circle
+  state.currentLng = cLng;
+  placeUserMarker(state.currentLat, state.currentLng);
+  map.setView([state.currentLat, state.currentLng], 17);
+
+  demoInterval = setInterval(() => {
+    if (!demoRunning) return;
+
+    step++;
+    const t   = (step / TOTAL) * 2 * Math.PI;
+    const lat = cLat + R * Math.cos(t);
+    const lng = cLng + R * Math.sin(t);
+
+    // Compute direction
+    const dLat = lat - state.currentLat;
+    const dLng = lng - state.currentLng;
+    currentHeading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
 
     state.currentLat = lat;
     state.currentLng = lng;
     addWalkPoint(lat, lng);
     placeUserMarker(lat, lng);
     map.panTo([lat, lng]);
-    state.steps += 15;
-    state.todaySteps += 15;
-    state.distance += 0.008;
-    state.todayDistance += 0.008;
-    updateStats();
-    step++;
 
-    if (step >= totalSteps) {
-      clearInterval(state.demoInterval);
-      state.demoRunning = false;
+    state.steps         += 10;
+    state.todaySteps    += 10;
+    state.sessionSteps  += 10;
+    state.distance      += 0.005;
+    state.todayDistance += 0.005;
+    state.sessionDist   += 0.005;
+    updateStats();
+
+    if (step >= TOTAL) {
+      demoRunning = false;
+      clearInterval(demoInterval);
+      demoInterval = null;
       document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
-      stopWalk();
+      // Close territory manually
+      state.walking = false;
+      if (state.walkPath.length > 2) { closeTerritory(); }
+      state.walkPath = [];
+      if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+      document.getElementById('walkBtn').textContent = '▶ START WALK';
+      document.getElementById('walkBtn').classList.remove('active');
+      document.getElementById('walkingHud').classList.remove('visible');
+      document.getElementById('statusBadge').textContent = '🟢 READY';
+      placeUserMarker(state.currentLat, state.currentLng);
       showNotif('Demo complete! Territory claimed 🎉');
+      saveUserToFirebase();
     }
-  }, 200); // fast — 200ms per step = 12 sec total
+  }, 130);
 }
 
 function persistState() {
@@ -871,10 +918,7 @@ function placeUserMarker(lat, lng) {
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
 }
 
-// Refresh marker size on zoom change
-if (typeof map !== 'undefined' && map) {
-  map.on('zoomend', () => { if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng); });
-}
+// zoomend registered inside initMap() after map is created
 
 function generatePolygon(cLat, cLng, size, pts) {
   return Array.from({ length: pts }, (_, i) => {
@@ -962,10 +1006,12 @@ function startAutoWalkGPS() {
         addWalkPoint(lat, lng);
         const newSteps = estimateSteps(speed || (distMoved / 2));
         const newDist  = Math.max(speed * 2, distMoved) / 1000;
-        state.steps    += newSteps;
-        state.distance += newDist;
+        state.steps       += newSteps;
+        state.distance    += newDist;
         state.todaySteps    += newSteps;
         state.todayDistance += newDist;
+        state.sessionSteps  += newSteps;
+        state.sessionDist   += newDist;
         updateStats();
 
       } else if (state.walking) {
@@ -987,8 +1033,10 @@ function toggleWalk() { state.walking ? stopWalk() : startWalk(false); }
 
 function startWalk(auto = false) {
   state.walking = true;
-  state.walkPath = state.walkPath.length ? state.walkPath : [];
-  state.sessionGain = state.sessionGain || 0;
+  state.walkPath  = [];
+  state.sessionGain  = 0;
+  state.sessionDist  = 0;
+  state.sessionSteps = 0;
 
   document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
   document.getElementById('walkBtn').classList.add('active');
@@ -1008,6 +1056,15 @@ function stopWalk() {
   state.walking = false;
   state.lastActivity = Date.now();
   state.health = Math.min(100, state.health + 20);
+
+  // Also stop demo if running
+  if (demoRunning) {
+    clearInterval(demoInterval);
+    demoInterval = null;
+    demoRunning = false;
+    const btn = document.getElementById('devDemoBtn');
+    if (btn) btn.textContent = '🚶 Demo Walk';
+  }
 
   if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
   if (walkInterval) clearInterval(walkInterval);
@@ -1324,26 +1381,15 @@ function calculateArea(path) {
 
 // ===== DECAY =====
 function startDecay() {
+  // Silently track health — UI elements removed, decay logic kept for Firebase
   decayInterval = setInterval(() => {
     if (state.walking) return;
     const inactiveMins = (Date.now() - state.lastActivity) / 60000;
     if (inactiveMins > 1) {
-      state.health = Math.max(0, state.health - 0.3);
-      if (state.health < 60) {
-        document.getElementById('decayWarning').style.display = 'block';
-        state.territory = Math.max(0, Math.floor(state.territory * 0.999));
-      }
-      const fillEl = document.getElementById('healthFill');
-      const pctEl = document.getElementById('healthPct');
-      const noteEl = document.getElementById('healthNote');
-      if (fillEl) fillEl.style.width = state.health + '%';
-      if (pctEl) pctEl.textContent = Math.floor(state.health) + '%';
-      if (noteEl) noteEl.textContent = inactiveMins > 2 ?
-        `⚠️ Inactive ${Math.floor(inactiveMins)}m – territory shrinking` :
-        'Walk to maintain your territory';
+      state.health = Math.max(0, state.health - 0.1);
       persistState();
     }
-  }, 5000);
+  }, 10000);
 }
 
 // ===== STATS =====
@@ -1358,21 +1404,22 @@ function updateStats() {
     state.todayCaptures = 0;
   }
 
-  // Lifetime
-  document.getElementById('statTerritory').textContent = formatNum(state.territory);
-  document.getElementById('statSteps').textContent = formatNum(state.steps);
-  document.getElementById('statDist').textContent = state.distance.toFixed(1);
-  document.getElementById('statCaptures').textContent = state.captures;
+  // Lifetime — safe getters to avoid null errors if element not in DOM
+  const safe = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  safe('statTerritory', formatNum(state.territory));
+  safe('statSteps', formatNum(state.steps));
+  safe('statDist', state.distance.toFixed(1));
+  safe('statCaptures', state.captures);
 
   // Today
-  document.getElementById('statTodayTerritory').textContent = formatNum(state.todayTerritory);
-  document.getElementById('statTodaySteps').textContent = formatNum(state.todaySteps);
-  document.getElementById('statTodayDist').textContent = state.todayDistance.toFixed(1);
-  document.getElementById('statTodayCaptures').textContent = state.todayCaptures;
+  safe('statTodayTerritory', formatNum(state.todayTerritory));
+  safe('statTodaySteps', formatNum(state.todaySteps));
+  safe('statTodayDist', state.todayDistance.toFixed(1));
+  safe('statTodayCaptures', state.todayCaptures);
 
   // HUD
-  document.getElementById('hudDist').textContent = state.distance.toFixed(2) + ' km';
-  document.getElementById('hudTerritory').textContent = '+' + state.sessionGain + ' m²';
+  safe('hudDist', state.sessionDist.toFixed(2) + ' km');
+  safe('hudTerritory', '+' + state.sessionGain + ' m²');
 
   // Refresh polygon label so steps count updates live on map
   if (state.userId && territoryStore[state.userId]) redrawTerritory(state.userId);
@@ -1386,7 +1433,11 @@ function formatNum(n) {
 
 // ===== LEADERBOARD =====
 function renderLeaderboards() {
-  if (db) return; // Firebase handles it
+  if (db) {
+    // Firebase handles live leaderboard via listenToOtherUsers → renderFirebaseLeaderboard
+    return;
+  }
+  // Fallback mock data for offline/no-Firebase mode
   const local = [
     { name: state.user.name, avatar: state.user.avatar, color: state.user.color, city: state.user.city, territory: state.territory, me: true },
     { name: 'Arjun Singh', avatar: '🥬💪', color: '#ff4b6e', city: state.user.city, territory: 8420 },
