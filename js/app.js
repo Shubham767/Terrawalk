@@ -29,25 +29,22 @@ const AVATARS = [
   '🐺','🦊','🐻','🦁','🐯',         // animals: wolf, fox, bear, lion, tiger
   '🦅','🐘','🦓','🦒','🐆'          // animals: eagle, elephant, zebra, giraffe, leopard
 ];
-const AVATAR_NAMES = ["Cowboy", "Superhero", "Ninja", "The Suit", "Astronaut", "Kid", "Wizard", "Detective", "Scientist", "Prince", "Wolf", "Fox", "Bear", "Lion", "Tiger"];
-
-const AVATARS_SVG = [
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <ellipse cx="28" cy="10" rx="14" ry="3" fill="#7a5c0f"/> <rect x="18" y="4" width="18" height="9" rx="3" fill="#9a7520"/> <circle cx="30" cy="22" r="9" fill="#FDBCB4"/> <circle cx="33" cy="20" r="1.5" fill="#333"/> <ellipse cx="35" cy="23" rx="3" ry="2" fill="#e8a898"/> <rect x="20" y="30" width="14" height="18" rx="3" fill="#c0392b"/> <g class="tw-arm-left"><rect x="16" y="30" width="6" height="14" rx="3" fill="#c0392b"/><circle cx="16" cy="44" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="30" width="6" height="12" rx="3" fill="#c0392b"/><circle cx="34" cy="42" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="20" y="47" width="7" height="17" rx="3" fill="#2c3e50"/><rect x="17" y="61" width="11" height="6" rx="3" fill="#5D3A1A"/></g> <g class="tw-leg-right"><rect x="28" y="47" width="7" height="14" rx="3" fill="#2c3e50"/><rect x="26" y="58" width="10" height="6" rx="3" fill="#5D3A1A"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <path d="M34 32 Q42 45 38 68" stroke="#8B0000" stroke-width="8" fill="none" stroke-linecap="round"/> <circle cx="30" cy="21" r="9" fill="#FDBCB4"/> <rect x="16" y="13" width="18" height="7" rx="3" fill="#1a237e"/> <circle cx="33" cy="19" r="1.5" fill="#1a237e"/> <rect x="18" y="30" width="16" height="18" rx="3" fill="#1565C0"/> <text x="26" y="43" text-anchor="middle" font-size="9" font-weight="bold" fill="#ffd700">S</text> <g class="tw-arm-left"><rect x="14" y="30" width="6" height="15" rx="3" fill="#1565C0"/><circle cx="14" cy="45" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="30" width="6" height="12" rx="3" fill="#1565C0"/><circle cx="34" cy="41" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="19" y="47" width="7" height="17" rx="3" fill="#1565C0"/><rect x="16" y="61" width="11" height="6" rx="3" fill="#B71C1C"/></g> <g class="tw-leg-right"><rect x="27" y="47" width="7" height="14" rx="3" fill="#1565C0"/><rect x="25" y="58" width="10" height="6" rx="3" fill="#B71C1C"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <circle cx="29" cy="21" r="9" fill="#2c2c2c"/> <rect x="19" y="17" width="18" height="6" rx="2" fill="#1a1a1a"/> <circle cx="33" cy="20" r="1.5" fill="white"/> <rect x="18" y="30" width="14" height="18" rx="3" fill="#1a1a1a"/> <g class="tw-arm-left"><rect x="13" y="30" width="7" height="14" rx="3" fill="#1a1a1a"/><rect x="10" y="38" width="5" height="12" rx="2" fill="#c0392b"/></g> <g class="tw-arm-right"><rect x="29" y="30" width="7" height="12" rx="3" fill="#1a1a1a"/><rect x="34" y="33" width="5" height="12" rx="2" fill="#c0392b"/></g> <g class="tw-leg-left"><rect x="19" y="47" width="7" height="17" rx="3" fill="#1a1a1a"/><rect x="16" y="61" width="11" height="6" rx="3" fill="#111"/></g> <g class="tw-leg-right"><rect x="27" y="47" width="7" height="14" rx="3" fill="#1a1a1a"/><rect x="25" y="58" width="10" height="6" rx="3" fill="#111"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <circle cx="30" cy="19" r="9" fill="#FDBCB4"/> <rect x="20" y="8" width="18" height="8" rx="2" fill="#2c3e50"/> <circle cx="33" cy="18" r="1.2" fill="#333"/> <rect x="18" y="28" width="16" height="20" rx="3" fill="#2c3e50"/> <rect x="25" y="28" width="5" height="20" fill="#ecf0f1"/> <circle cx="27" cy="34" r="1.2" fill="#e74c3c"/> <circle cx="27" cy="39" r="1.2" fill="#e74c3c"/> <path d="M20 28 L24 36 L18 36Z" fill="#1a252f"/> <g class="tw-arm-left"><rect x="13" y="28" width="7" height="14" rx="3" fill="#2c3e50"/><circle cx="13" cy="42" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="28" width="7" height="12" rx="3" fill="#2c3e50"/><circle cx="35" cy="39" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="19" y="47" width="7" height="17" rx="3" fill="#1a252f"/><rect x="16" y="61" width="11" height="6" rx="3" fill="#111"/></g> <g class="tw-leg-right"><rect x="27" y="47" width="7" height="14" rx="3" fill="#1a252f"/><rect x="25" y="58" width="10" height="6" rx="3" fill="#111"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <circle cx="29" cy="20" r="12" fill="#ecf0f1"/> <circle cx="30" cy="20" r="8" fill="#85c1e9"/> <circle cx="33" cy="18" r="1.5" fill="#1a1a1a"/> <rect x="3" y="26" width="6" height="10" rx="3" fill="#95a5a6"/> <rect x="16" y="30" width="20" height="22" rx="6" fill="#ecf0f1"/> <rect x="19" y="35" width="12" height="8" rx="2" fill="#3498db"/> <g class="tw-arm-left"><rect x="10" y="30" width="8" height="14" rx="4" fill="#ecf0f1"/></g> <g class="tw-arm-right"><rect x="32" y="30" width="8" height="12" rx="4" fill="#ecf0f1"/></g> <g class="tw-leg-left"><rect x="18" y="51" width="8" height="15" rx="4" fill="#bdc3c7"/><ellipse cx="22" cy="66" rx="7" ry="3" fill="#95a5a6"/></g> <g class="tw-leg-right"><rect x="27" y="51" width="8" height="12" rx="4" fill="#bdc3c7"/><ellipse cx="31" cy="63" rx="7" ry="3" fill="#95a5a6"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <rect x="19" y="3" width="18" height="8" rx="5" fill="#e74c3c"/> <circle cx="29" cy="21" r="9" fill="#FDBCB4"/> <circle cx="33" cy="20" r="1.5" fill="#333"/> <circle cx="34" cy="23" r="2" fill="#ffb3b3" opacity="0.7"/> <path d="M31 25 Q33 27 35 25" stroke="#c07868" stroke-width="1" fill="none"/> <rect x="18" y="30" width="14" height="16" rx="3" fill="#3498db"/> <g class="tw-arm-left"><rect x="13" y="30" width="7" height="13" rx="3" fill="#3498db"/><circle cx="13" cy="43" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="29" y="30" width="7" height="11" rx="3" fill="#3498db"/><circle cx="34" cy="40" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="19" y="45" width="7" height="17" rx="3" fill="#e74c3c"/><rect x="16" y="59" width="11" height="6" rx="4" fill="#c0392b"/></g> <g class="tw-leg-right"><rect x="27" y="45" width="7" height="14" rx="3" fill="#e74c3c"/><rect x="25" y="56" width="10" height="6" rx="4" fill="#c0392b"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <polygon points="29,2 36,20 22,20" fill="#6c3483"/> <ellipse cx="29" cy="20" rx="11" ry="3.5" fill="#6c3483"/> <circle cx="29" cy="28" r="9" fill="#FDBCB4"/> <circle cx="33" cy="27" r="1.2" fill="#333"/> <rect x="18" y="37" width="16" height="18" rx="4" fill="#6c3483"/> <path d="M20 37 Q29 32 37 37" stroke="#f39c12" stroke-width="1.5" fill="none"/> <g class="tw-arm-left"><rect x="12" y="37" width="8" height="14" rx="3" fill="#6c3483"/><circle cx="12" cy="51" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="37" width="8" height="12" rx="3" fill="#6c3483"/><rect x="36" y="38" width="5" height="18" rx="2" fill="#8B6914"/><circle cx="38" cy="37" r="5" fill="#f1c40f"/></g> <g class="tw-leg-left"><rect x="19" y="54" width="7" height="14" rx="3" fill="#4a235a"/><rect x="16" y="65" width="11" height="6" rx="3" fill="#3b1a47"/></g> <g class="tw-leg-right"><rect x="27" y="54" width="7" height="11" rx="3" fill="#4a235a"/><rect x="25" y="62" width="10" height="6" rx="3" fill="#3b1a47"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <ellipse cx="29" cy="10" rx="14" ry="3.5" fill="#2c2c2c"/> <rect x="18" y="4" width="18" height="9" rx="2" fill="#3d3d3d"/> <circle cx="30" cy="22" r="9" fill="#FDBCB4"/> <circle cx="33" cy="21" r="1.2" fill="#333"/> <rect x="18" y="31" width="15" height="19" rx="3" fill="#5d4037"/> <path d="M20 31 L24 39 L18 39Z" fill="#3e2723"/> <g class="tw-arm-left"><rect x="12" y="31" width="8" height="14" rx="3" fill="#5d4037"/><rect x="10" y="39" width="5" height="11" rx="2" fill="#8B6914"/></g> <g class="tw-arm-right"><rect x="29" y="31" width="7" height="12" rx="3" fill="#5d4037"/><circle cx="34" cy="42" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="19" y="49" width="7" height="17" rx="3" fill="#3e2723"/><rect x="16" y="63" width="11" height="6" rx="3" fill="#1a0f0a"/></g> <g class="tw-leg-right"><rect x="27" y="49" width="7" height="14" rx="3" fill="#3e2723"/><rect x="25" y="60" width="10" height="6" rx="3" fill="#1a0f0a"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <circle cx="30" cy="19" r="9" fill="#FDBCB4"/> <ellipse cx="28" cy="18" rx="4" ry="3" fill="none" stroke="#555" stroke-width="1.5"/> <ellipse cx="35" cy="18" rx="4" ry="3" fill="none" stroke="#555" stroke-width="1.5"/> <circle cx="28" cy="18" r="1.2" fill="#1a6baa"/> <circle cx="35" cy="18" r="1.2" fill="#1a6baa"/> <rect x="17" y="28" width="17" height="20" rx="3" fill="white" stroke="#ddd" stroke-width="1"/> <rect x="20" y="32" width="11" height="11" rx="2" fill="#d6eaf8"/> <g class="tw-arm-left"><rect x="11" y="28" width="8" height="14" rx="3" fill="white" stroke="#ddd" stroke-width="1"/><circle cx="11" cy="42" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="28" width="8" height="12" rx="3" fill="white" stroke="#ddd" stroke-width="1"/><circle cx="36" cy="37" r="5" fill="#85c1e9" opacity="0.9"/></g> <g class="tw-leg-left"><rect x="18" y="47" width="7" height="17" rx="3" fill="#1a252f"/><rect x="15" y="61" width="11" height="6" rx="3" fill="#111"/></g> <g class="tw-leg-right"><rect x="26" y="47" width="7" height="14" rx="3" fill="#1a252f"/><rect x="24" y="58" width="10" height="6" rx="3" fill="#111"/></g> </svg>`,
-  `<svg width="52" height="72" viewBox="0 0 52 72" xmlns="http://www.w3.org/2000/svg"> <polygon points="29,2 33,10 40,8 35,15 38,23 29,18 20,23 23,15 18,8 25,10" fill="#ffd700"/> <circle cx="29" cy="25" r="9" fill="#FDBCB4"/> <circle cx="33" cy="23" r="1.2" fill="#333"/> <rect x="18" y="33" width="16" height="19" rx="3" fill="#1565C0"/> <rect x="23" y="33" width="7" height="19" fill="#0d47a1"/> <g class="tw-arm-left"><rect x="12" y="33" width="8" height="14" rx="3" fill="#1565C0"/><circle cx="12" cy="47" r="4" fill="#FDBCB4"/></g> <g class="tw-arm-right"><rect x="30" y="33" width="8" height="12" rx="3" fill="#1565C0"/><circle cx="36" cy="44" r="4" fill="#FDBCB4"/></g> <g class="tw-leg-left"><rect x="19" y="51" width="7" height="16" rx="3" fill="#0d47a1"/><rect x="16" y="64" width="11" height="6" rx="3" fill="#ffd700"/></g> <g class="tw-leg-right"><rect x="27" y="51" width="7" height="13" rx="3" fill="#0d47a1"/><rect x="25" y="61" width="10" height="6" rx="3" fill="#ffd700"/></g> </svg>`,
-  `<svg width="68" height="56" viewBox="0 0 68 56" xmlns="http://www.w3.org/2000/svg"> <path d="M58 8 Q68 2 66 16" stroke="#95a5a6" stroke-width="4" fill="none" stroke-linecap="round"/> <ellipse cx="38" cy="30" rx="22" ry="14" fill="#95a5a6"/> <ellipse cx="38" cy="33" rx="13" ry="8" fill="#bdc3c7"/> <polygon points="54,18 58,6 62,18" fill="#7f8c8d"/> <polygon points="62,18 66,6 68,18" fill="#7f8c8d"/> <polygon points="55,18 58,9 61,18" fill="#ecdbcf"/> <polygon points="63,18 66,9 68,18" fill="#ecdbcf"/> <ellipse cx="58" cy="24" rx="12" ry="10" fill="#95a5a6"/> <ellipse cx="64" cy="28" rx="6" ry="4" fill="#bdc3c7"/> <ellipse cx="63" cy="25" rx="2.5" ry="2" fill="#2c3e50"/> <circle cx="66" cy="23" r="2" fill="#f39c12"/><circle cx="66" cy="23" r="1" fill="#111"/> <g class="tw-leg-left"><rect x="18" y="41" width="7" height="14" rx="3" fill="#7f8c8d"/><ellipse cx="21" cy="55" rx="6" ry="2.5" fill="#6d7d7e"/></g> <g class="tw-leg-right"><rect x="28" y="41" width="7" height="11" rx="3" fill="#7f8c8d"/><ellipse cx="31" cy="52" rx="6" ry="2.5" fill="#6d7d7e"/></g> <g class="tw-arm-left"><rect x="44" y="41" width="7" height="14" rx="3" fill="#7f8c8d"/><ellipse cx="47" cy="55" rx="6" ry="2.5" fill="#6d7d7e"/></g> <g class="tw-arm-right"><rect x="52" y="41" width="7" height="11" rx="3" fill="#7f8c8d"/><ellipse cx="55" cy="52" rx="6" ry="2.5" fill="#6d7d7e"/></g> </svg>`,
-  `<svg width="68" height="56" viewBox="0 0 68 56" xmlns="http://www.w3.org/2000/svg"> <path d="M5 8 Q0 2 2 18" stroke="#e67e22" stroke-width="5" fill="none" stroke-linecap="round"/> <circle cx="2" cy="18" r="5" fill="#fff3e0"/> <ellipse cx="30" cy="30" rx="22" ry="13" fill="#e67e22"/> <ellipse cx="30" cy="33" rx="12" ry="7" fill="#fdebd0"/> <polygon points="53,18 57,5 61,18" fill="#e67e22"/> <polygon points="61,18 65,5 67,18" fill="#e67e22"/> <polygon points="54,18 57,8 60,18" fill="#fff3e0"/> <polygon points="62,18 65,8 67,18" fill="#fff3e0"/> <ellipse cx="57" cy="24" rx="12" ry="10" fill="#e67e22"/> <ellipse cx="63" cy="28" rx="6" ry="4" fill="#fdebd0"/> <ellipse cx="62" cy="25" rx="2.5" ry="2" fill="#1a1a1a"/> <circle cx="65" cy="22" r="2" fill="#2c3e50"/><circle cx="65" cy="22" r="1" fill="#111"/> <g class="tw-leg-left"><rect x="16" y="40" width="7" height="14" rx="3" fill="#d35400"/><ellipse cx="19" cy="54" rx="6" ry="2.5" fill="#c0392b"/></g> <g class="tw-leg-right"><rect x="26" y="40" width="7" height="11" rx="3" fill="#d35400"/><ellipse cx="29" cy="51" rx="6" ry="2.5" fill="#c0392b"/></g> <g class="tw-arm-left"><rect x="42" y="40" width="7" height="14" rx="3" fill="#d35400"/><ellipse cx="45" cy="54" rx="6" ry="2.5" fill="#c0392b"/></g> <g class="tw-arm-right"><rect x="50" y="40" width="7" height="11" rx="3" fill="#d35400"/><ellipse cx="53" cy="51" rx="6" ry="2.5" fill="#c0392b"/></g> </svg>`,
-  `<svg width="68" height="60" viewBox="0 0 68 60" xmlns="http://www.w3.org/2000/svg"> <ellipse cx="34" cy="34" rx="23" ry="17" fill="#795548"/> <ellipse cx="34" cy="38" rx="14" ry="10" fill="#a1887f"/> <circle cx="54" cy="17" r="8" fill="#795548"/><circle cx="64" cy="17" r="8" fill="#795548"/> <circle cx="54" cy="17" r="5" fill="#a1887f"/><circle cx="64" cy="17" r="5" fill="#a1887f"/> <circle cx="58" cy="26" r="13" fill="#795548"/> <ellipse cx="64" cy="31" rx="7" ry="5" fill="#a1887f"/> <ellipse cx="63" cy="27" rx="3" ry="2.5" fill="#1a1a1a"/> <circle cx="66" cy="25" r="2.5" fill="#1a1a1a"/><circle cx="67" cy="24" r="1" fill="white"/> <g class="tw-leg-left"><rect x="14" y="47" width="9" height="13" rx="4" fill="#6d4c41"/><ellipse cx="18" cy="60" rx="7" ry="3" fill="#5d4037"/></g> <g class="tw-leg-right"><rect x="26" y="47" width="9" height="10" rx="4" fill="#6d4c41"/><ellipse cx="30" cy="57" rx="7" ry="3" fill="#5d4037"/></g> <g class="tw-arm-left"><rect x="40" y="47" width="9" height="13" rx="4" fill="#6d4c41"/><ellipse cx="44" cy="60" rx="7" ry="3" fill="#5d4037"/></g> <g class="tw-arm-right"><rect x="50" y="47" width="9" height="10" rx="4" fill="#6d4c41"/><ellipse cx="54" cy="57" rx="7" ry="3" fill="#5d4037"/></g> </svg>`,
-  `<svg width="68" height="58" viewBox="0 0 68 58" xmlns="http://www.w3.org/2000/svg"> <path d="M5 10 Q0 2 2 18" stroke="#d4890a" stroke-width="5" fill="none" stroke-linecap="round"/> <circle cx="2" cy="18" r="5" fill="#d4890a"/> <ellipse cx="34" cy="34" rx="22" ry="14" fill="#e8b86d"/> <ellipse cx="34" cy="38" rx="13" ry="8" fill="#f5cba7"/> <circle cx="55" cy="22" r="14" fill="#d4890a"/> <circle cx="55" cy="22" r="10" fill="#e8b86d"/> <ellipse cx="61" cy="27" rx="6" ry="4" fill="#f5cba7"/> <ellipse cx="60" cy="23" rx="2.5" ry="2" fill="#c0392b"/> <circle cx="63" cy="20" r="2.5" fill="#27ae60"/><circle cx="63" cy="20" r="1.2" fill="#111"/> <g class="tw-leg-left"><rect x="14" y="44" width="8" height="14" rx="4" fill="#d4a843"/><ellipse cx="18" cy="58" rx="7" ry="3" fill="#c8973c"/></g> <g class="tw-leg-right"><rect x="25" y="44" width="8" height="11" rx="4" fill="#d4a843"/><ellipse cx="29" cy="55" rx="7" ry="3" fill="#c8973c"/></g> <g class="tw-arm-left"><rect x="40" y="44" width="8" height="14" rx="4" fill="#d4a843"/><ellipse cx="44" cy="58" rx="7" ry="3" fill="#c8973c"/></g> <g class="tw-arm-right"><rect x="50" y="44" width="8" height="11" rx="4" fill="#d4a843"/><ellipse cx="54" cy="55" rx="7" ry="3" fill="#c8973c"/></g> </svg>`,
-  `<svg width="68" height="58" viewBox="0 0 68 58" xmlns="http://www.w3.org/2000/svg"> <path d="M5 10 Q0 2 2 18" stroke="#e67e22" stroke-width="5" fill="none" stroke-linecap="round"/> <ellipse cx="34" cy="33" rx="22" ry="14" fill="#e67e22"/> <ellipse cx="34" cy="37" rx="13" ry="8" fill="#fdebd0"/> <line x1="22" y1="23" x2="25" y2="34" stroke="#c0392b" stroke-width="2"/> <line x1="32" y1="21" x2="32" y2="33" stroke="#c0392b" stroke-width="2"/> <line x1="42" y1="23" x2="39" y2="34" stroke="#c0392b" stroke-width="2"/> <circle cx="52" cy="18" r="7" fill="#e67e22"/><circle cx="62" cy="18" r="7" fill="#e67e22"/> <circle cx="52" cy="18" r="4" fill="#fdebd0"/><circle cx="62" cy="18" r="4" fill="#fdebd0"/> <circle cx="56" cy="26" r="12" fill="#e67e22"/> <line x1="50" y1="18" x2="53" y2="26" stroke="#c0392b" stroke-width="1.5"/> <line x1="56" y1="16" x2="56" y2="24" stroke="#c0392b" stroke-width="1.5"/> <line x1="62" y1="18" x2="59" y2="26" stroke="#c0392b" stroke-width="1.5"/> <ellipse cx="62" cy="30" rx="6" ry="4" fill="#fdebd0"/> <ellipse cx="61" cy="27" rx="2.5" ry="2" fill="#1a1a1a"/> <circle cx="64" cy="24" r="2.5" fill="#2c3e50"/><circle cx="64" cy="24" r="1.2" fill="#111"/> <g class="tw-leg-left"><rect x="14" y="43" width="8" height="14" rx="4" fill="#d35400"/><ellipse cx="18" cy="57" rx="7" ry="3" fill="#c0392b"/></g> <g class="tw-leg-right"><rect x="25" y="43" width="8" height="11" rx="4" fill="#d35400"/><ellipse cx="29" cy="54" rx="7" ry="3" fill="#c0392b"/></g> <g class="tw-arm-left"><rect x="40" y="43" width="8" height="14" rx="4" fill="#d35400"/><ellipse cx="44" cy="57" rx="7" ry="3" fill="#c0392b"/></g> <g class="tw-arm-right"><rect x="50" y="43" width="8" height="11" rx="4" fill="#d35400"/><ellipse cx="54" cy="54" rx="7" ry="3" fill="#c0392b"/></g> </svg>`,
+const AVATAR_NAMES = [
+  "Person","Man","Woman",
+  "Penguin","Owl","Duck","Eagle","Turtle","Octopus","Crab","Lobster","Dolphin","Shark",
+  "Bee","Butterfly","Ladybug","Ant","Cricket",
+  "Hedgehog","Sloth","Otter","Skunk","Kangaroo","Bison","Mammoth","Giraffe","Zebra"
 ];
+
+const AVATARS_EMOJI = [
+  "🧍","🧍‍♂️","🧍‍♀️",
+  "🐧","🦉","🦆","🦅","🐢","🐙","🦀","🦞","🐬","🦈",
+  "🐝","🦋","🐞","🐜","🦗",
+  "🦔","🦥","🦦","🦨","🦘","🦬","🦣","🦒","🦓"
+];
+
+// Legacy SVG array kept empty — emoji used instead
+const AVATARS_SVG = AVATARS_EMOJI.map(() => '');
 const COLORS = ['#00e5a0','#ff4b6e','#4b9fff','#ffd700','#ff6b35','#a855f7','#ec4899','#14b8a6','#f97316','#84cc16'];
 const CITIES = ['Mumbai','Delhi','Bangalore','Hyderabad','Chennai','Pune','Kolkata','Ahmedabad','Jaipur','Surat'];
 const DECAY_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48 hours
@@ -80,7 +77,9 @@ let state = {
 };
 
 let map, userMarker, currentPolyline;
-let currentHeading = 0; // degrees: 0=north/right, 90=south, 180=west (flipped)
+let currentHeading = 0;
+// demo state
+if (!state.demoRunning) state.demoRunning = false; // degrees: 0=north/right, 90=south, 180=west (flipped)
 let walkInterval, decayInterval, gpsWatcher;
 let db = null; // Firebase database reference
 let deferredInstallPrompt = null;
@@ -355,8 +354,8 @@ function buildProfileModal() {
     const el = document.createElement('div');
     el.className = 'avatar-option' + (i === 0 ? ' selected' : '');
     el.dataset.avatar = name;
-    const svg = AVATARS_SVG[i] || '';
-    el.innerHTML = `<div style="width:40px;height:56px;display:flex;align-items:center;justify-content:center;overflow:hidden">${svg}</div><span class="av-label">${name}</span>`;
+    const emoji = AVATARS_EMOJI[i] || '🧍';
+    el.innerHTML = `<div style="font-size:28px;line-height:1.2;text-align:center">${emoji}</div><span class="av-label">${name}</span>`;
     el.onclick = () => {
       document.querySelectorAll('.avatar-option').forEach(x => x.classList.remove('selected'));
       el.classList.add('selected');
@@ -624,8 +623,9 @@ function logout() {
 function updateHeaderUI() {
   const acc = state.user.accessory && state.user.accessory !== 'none'
     ? ACCESSORIES.find(a => a.id === state.user.accessory)?.emoji || '' : '';
+  const avatarEmoji = getAvatarEmoji(state.user.avatar || 'Person');
   const avatarEl = document.getElementById('headerAvatar');
-  avatarEl.innerHTML = acc || '🚶';
+  avatarEl.innerHTML = acc || avatarEmoji;
   avatarEl.style.background = state.user.color + '33';
   avatarEl.style.border = '2px solid ' + state.user.color;
   avatarEl.style.fontSize = '14px';
@@ -677,6 +677,72 @@ function devSpawnRivals() {
   showNotif('4 rivals spawned nearby 👥');
 }
 
+function devDemoWalk() {
+  if (!state.user) { showNotif('Login first'); return; }
+  if (!map) { showNotif('Map not ready'); return; }
+  if (state.demoRunning) {
+    // Stop demo
+    clearInterval(state.demoInterval);
+    state.demoRunning = false;
+    stopWalk();
+    document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
+    showNotif('Demo walk stopped');
+    return;
+  }
+
+  // Start from current GPS or map center
+  const center = state.currentLat
+    ? { lat: state.currentLat, lng: state.currentLng }
+    : { lat: map.getCenter().lat, lng: map.getCenter().lng };
+
+  state.currentLat = center.lat;
+  state.currentLng = center.lng;
+
+  // Build a circular walk path around current location
+  const R = 0.0008; // ~80m radius
+  const totalSteps = 60;
+  let step = 0;
+  state.demoRunning = true;
+  document.getElementById('devDemoBtn').textContent = '⏹ Stop Demo';
+  startWalk(true);
+  showNotif('🎮 Demo walk started — watch territory form!');
+
+  state.demoInterval = setInterval(() => {
+    if (!state.demoRunning) return;
+    // Walk in a figure-8 pattern
+    const t = (step / totalSteps) * 2 * Math.PI;
+    const lat = center.lat + R * Math.sin(t);
+    const lng = center.lng + R * Math.sin(t) * Math.cos(t);
+
+    // Compute heading
+    if (state.currentLat !== null) {
+      const dLng = lng - state.currentLng;
+      const dLat = lat - state.currentLat;
+      currentHeading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
+    }
+
+    state.currentLat = lat;
+    state.currentLng = lng;
+    addWalkPoint(lat, lng);
+    placeUserMarker(lat, lng);
+    map.panTo([lat, lng]);
+    state.steps += 15;
+    state.todaySteps += 15;
+    state.distance += 0.008;
+    state.todayDistance += 0.008;
+    updateStats();
+    step++;
+
+    if (step >= totalSteps) {
+      clearInterval(state.demoInterval);
+      state.demoRunning = false;
+      document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
+      stopWalk();
+      showNotif('Demo complete! Territory claimed 🎉');
+    }
+  }, 200); // fast — 200ms per step = 12 sec total
+}
+
 function persistState() {
   // State is persisted to Firebase via saveUserToFirebase()
   // localStorage used only as fallback for territory GeoJSON
@@ -705,6 +771,8 @@ function initMap(onReady) {
       placeUserMarker(lat, lng);
       updateGpsStatus('locked', 'GPS Locked — auto-walk ON ✓');
       startAutoWalkGPS(); // auto-detect walking from now on
+      // Resize avatar on zoom
+      map.on('zoomend', () => { if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng); });
       showNotif('📍 GPS ready! Walk and territory claims automatically 🚶');
       if (onReady) onReady();
     },
@@ -731,18 +799,12 @@ function updateGpsStatus(status, text) {
   label.textContent = text;
 }
 
-function getAvatarSVG(avatarName) {
+function getAvatarEmoji(avatarName) {
   const idx = AVATAR_NAMES.indexOf(avatarName);
-  if (idx >= 0 && AVATARS_SVG[idx]) {
-    // Replace class names with tw- prefixed versions for scoped CSS
-    return AVATARS_SVG[idx]
-      .replace(/class="arm-left"/g, 'class="tw-arm-left"')
-      .replace(/class="arm-right"/g, 'class="tw-arm-right"')
-      .replace(/class="leg-left"/g, 'class="tw-leg-left"')
-      .replace(/class="leg-right"/g, 'class="tw-leg-right"');
-  }
-  return `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" fill="${state.user ? state.user.color : '#00e5a0'}"/></svg>`;
+  return idx >= 0 ? AVATARS_EMOJI[idx] : '🧍';
 }
+// Keep legacy name for any code that calls it
+function getAvatarSVG(avatarName) { return getAvatarEmoji(avatarName); }
 
 // Inject walk keyframes into document head once — Leaflet strips <style> inside divIcon
 (function ensureWalkKeyframes() {
@@ -762,44 +824,56 @@ function getAvatarSVG(avatarName) {
   document.head.appendChild(s);
 })();
 
+function getZoomAvatarSize() {
+  // Scale avatar with zoom: tiny at zoom 12, normal at zoom 17, big at zoom 20
+  const zoom = map ? map.getZoom() : 17;
+  if (zoom <= 13) return 18;
+  if (zoom <= 14) return 22;
+  if (zoom <= 15) return 28;
+  if (zoom <= 16) return 34;
+  if (zoom <= 17) return 40;
+  if (zoom <= 18) return 46;
+  return 52;
+}
+
 function placeUserMarker(lat, lng) {
   const name = state.user ? state.user.name : 'You';
   const isWalking = state.walking;
-  let svgContent = getAvatarSVG(state.user ? state.user.avatar : '');
+  const emoji = getAvatarEmoji(state.user ? state.user.avatar : 'Person');
+  const sz = getZoomAvatarSize();
+  const fontSize = Math.round(sz * 0.75);
 
-  if (isWalking) {
-    // Replace tw- class names with animated class names (injected into document head above)
-    svgContent = svgContent
-      .replace(/class="tw-leg-left"/g,  'class="tw-walking-leg-l"')
-      .replace(/class="tw-leg-right"/g, 'class="tw-walking-leg-r"')
-      .replace(/class="tw-arm-left"/g,  'class="tw-walking-arm-l"')
-      .replace(/class="tw-arm-right"/g, 'class="tw-walking-arm-r"');
-  }
+  // Direction: flip emoji for westward movement
+  const facingLeft = currentHeading > 90 && currentHeading < 270;
+  const flipStyle = facingLeft ? 'transform:scaleX(-1);display:inline-block;' : 'display:inline-block;';
 
-  const bodyClass = isWalking ? 'tw-walking-body' : '';
+  // Walking bounce animation on emoji
+  const bounceClass = isWalking ? 'tw-walking-body' : '';
+  // Walking: shift left/right leg illusion via slight rotation on the emoji
+  const walkShake = isWalking ? 'animation:twBounce 0.45s ease-in-out infinite;' : '';
 
-  // Rotate avatar based on movement direction
-  // SVG avatars face right (east=90deg). Flip horizontally if heading is westward.
-  const headingDeg = currentHeading;
-  const facingLeft = headingDeg > 90 && headingDeg < 270; // moving west-ish
-  const rotateY = facingLeft ? 'scaleX(-1)' : 'scaleX(1)';
-  // Tilt slightly for north/south movement
-  const tiltAngle = (() => {
-    if (headingDeg <= 45 || headingDeg >= 315) return -15;  // heading north
-    if (headingDeg >= 135 && headingDeg <= 225) return 15;  // heading south
-    return 0;
-  })();
-  const transform = `${rotateY} rotate(${tiltAngle}deg)`;
+  // Only show name label at zoom >= 15
+  const zoom = map ? map.getZoom() : 17;
+  const nameLabel = zoom >= 15
+    ? `<div style="background:rgba(0,0,0,0.82);color:white;font-size:${Math.max(7, sz/5)}px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;max-width:${sz*2}px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color};margin-top:1px">${name}</div>`
+    : '';
 
   const icon = L.divIcon({
-    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;filter:drop-shadow(0 0 6px ${state.user.color})">
-      <div class="${bodyClass}" style="width:52px;height:72px;display:flex;align-items:center;justify-content:center;transform:${transform};transition:transform 0.3s ease;">${svgContent}</div>
-      <div style="background:rgba(0,0,0,0.8);color:white;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color}">${name}</div>
+    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 0 4px ${state.user.color})">
+      <div style="font-size:${fontSize}px;line-height:1;${walkShake}"><span style="${flipStyle}">${emoji}</span></div>
+      ${nameLabel}
     </div>`,
-    iconSize: [72, 92], iconAnchor: [36, 72], className: ''
+    iconSize: [sz * 1.4, sz + 20],
+    iconAnchor: [sz * 0.7, sz + 18],
+    className: ''
   });
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
+}
+
+// Refresh marker size on zoom change
+if (typeof map !== 'undefined' && map) {
+  map.on('zoomend', () => { if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng); });
 }
 
 function generatePolygon(cLat, cLng, size, pts) {
