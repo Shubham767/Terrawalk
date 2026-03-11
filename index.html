@@ -161,6 +161,7 @@
           <div class="stat-label">km</div>
         </div>
       </div>
+      <div style="font-size:11px;color:var(--text-dim);text-align:right;margin-top:2px">⚔️ Captures: <span id="statCaptures" style="color:var(--accent);font-weight:700">0</span></div>
 
       <!-- TODAY STATS — compact 3-column -->
       <div class="stats-section-label" style="margin-top:10px">📅 Today</div>
@@ -178,6 +179,7 @@
           <div class="stat-label">km</div>
         </div>
       </div>
+      <div style="font-size:11px;color:var(--text-dim);text-align:right;margin-top:2px">⚔️ Captures: <span id="statTodayCaptures" style="color:var(--accent);font-weight:700">0</span></div>
 
       <button class="walk-btn" id="walkBtn" onclick="toggleWalk()" style="margin-top:12px">▶ START WALK</button>
 
@@ -221,9 +223,9 @@
 
     <!-- DEV TOOLS — top left of map -->
     <div class="dev-tools" id="devTools">
-      <button onclick="devResetProgress()" style="background:#e74c3c;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer">🗑 Reset</button>
-      <button onclick="devSpawnRivals()" style="background:#3498db;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer">👥 Rivals</button>
-      <button id="devDemoBtn" onclick="devDemoWalk()" style="background:#27ae60;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer">🚶 Demo Walk</button>
+      <button onclick="devResetProgress()" style="background:#e74c3c;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0)">🗑 Reset</button>
+      <button onclick="devSpawnRivals()" style="background:#3498db;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0)">👥 Rivals</button>
+      <button id="devDemoBtn" onclick="devDemoWalk()" style="background:#27ae60;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0)">🚶 Demo Walk</button>
     </div>
   </div>
 </div>
