@@ -90,9 +90,38 @@
   </div>
   <div class="header-right">
     <div class="badge" id="statusBadge">🟢 READY</div>
-    <div class="user-chip" onclick="showNotif(state.user ? state.user.name + ' · ' + state.user.city : '')">
+    <div class="user-chip" id="profileChip" onclick="toggleProfileMenu(event)">
       <div class="avatar" id="headerAvatar" style="background:#1a1f2b">🚶</div>
       <span class="user-name" id="headerName">Walker</span>
+      <span style="font-size:10px;opacity:0.5;margin-left:2px">▾</span>
+    </div>
+
+    <!-- PROFILE DROPDOWN MENU -->
+    <div class="profile-menu" id="profileMenu">
+      <div class="profile-menu-header">
+        <div id="pmBio" class="pm-bio-display" onclick="openEditBio()">Tap to add your bio...</div>
+      </div>
+      <div class="profile-menu-item" onclick="openEditName()">
+        ✏️ <span>Edit Nickname</span>
+      </div>
+      <div class="profile-menu-item" onclick="openColorPicker()">
+        🎨 <span>Territory Color</span>
+        <div id="pmColorSwatch" style="width:14px;height:14px;border-radius:50%;background:#00e5a0;margin-left:auto;border:1px solid rgba(255,255,255,0.2)"></div>
+      </div>
+      <div class="profile-menu-item" onclick="openAccessories()">
+        🎩 <span>Avatar Accessories</span>
+      </div>
+      <div class="profile-menu-item" onclick="openZoneName()">
+        📍 <span>Name Your Zone</span>
+        <span id="pmZoneName" style="font-size:10px;opacity:0.5;margin-left:auto"></span>
+      </div>
+      <div class="profile-menu-item" onclick="openWalkGoal()">
+        🎯 <span>Daily Walk Goal</span>
+        <span id="pmWalkGoal" style="font-size:10px;opacity:0.5;margin-left:auto">5,000 steps</span>
+      </div>
+      <div class="profile-menu-item profile-menu-logout" onclick="logout()">
+        🚪 <span>Logout</span>
+      </div>
     </div>
   </div>
 </header>
@@ -116,69 +145,42 @@
         <span id="gpsLabel" style="color:var(--text-dim);font-size:12px">Waiting for GPS...</span>
       </div>
 
-      <!-- LIFETIME STATS -->
+      <!-- LIFETIME STATS — compact 3-column -->
       <div class="stats-section-label">🏆 Lifetime Stats</div>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="statTerritory">0</div>
-          <div class="stat-label">Area Covered</div>
+      <div class="stats-grid-3">
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statTerritory">0</div>
+          <div class="stat-label">Area</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statSteps">0</div>
-          <div class="stat-label">Steps Taken</div>
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statSteps">0</div>
+          <div class="stat-label">Steps</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statDist">0.0</div>
-          <div class="stat-label">km Walked</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statCaptures">0</div>
-          <div class="stat-label">Captures</div>
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statDist">0.0</div>
+          <div class="stat-label">km</div>
         </div>
       </div>
 
-      <!-- TODAY STATS -->
-      <div class="stats-section-label" style="margin-top:12px">📅 Today's Stats</div>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="statTodayTerritory">0</div>
-          <div class="stat-label">Area Covered</div>
+      <!-- TODAY STATS — compact 3-column -->
+      <div class="stats-section-label" style="margin-top:10px">📅 Today</div>
+      <div class="stats-grid-3">
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statTodayTerritory">0</div>
+          <div class="stat-label">Area</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statTodaySteps">0</div>
-          <div class="stat-label">Steps Taken</div>
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statTodaySteps">0</div>
+          <div class="stat-label">Steps</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statTodayDist">0.0</div>
-          <div class="stat-label">km Walked</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statTodayCaptures">0</div>
-          <div class="stat-label">Captures</div>
+        <div class="stat-card-sm">
+          <div class="stat-value-sm" id="statTodayDist">0.0</div>
+          <div class="stat-label">km</div>
         </div>
       </div>
 
-      <div class="health-card">
-        <div class="health-header">
-          <span class="health-title">⚡ Territory Health</span>
-          <span class="health-value" id="healthPct">100%</span>
-        </div>
-        <div class="health-bar">
-          <div class="health-fill" id="healthFill" style="width:100%"></div>
-        </div>
-        <div class="health-note" id="healthNote">Walk daily to keep your territory</div>
-      </div>
+      <button class="walk-btn" id="walkBtn" onclick="toggleWalk()" style="margin-top:12px">▶ START WALK</button>
 
-      <div class="decay-warning" id="decayWarning" style="display:none">
-        ⚠️ Your territory is shrinking! Walk now.
-      </div>
-
-      <button class="walk-btn" id="walkBtn" onclick="toggleWalk()">▶ START WALK</button>
-
-      <div>
-        <div class="section-title" style="margin-bottom:8px">🏅 Achievements</div>
-        <div id="achievementsList"></div>
-      </div>
     </div>
 
     <!-- LOCAL LEADERBOARD -->
@@ -204,8 +206,23 @@
     <div class="walking-hud" id="walkingHud">
       <div class="hud-label">Distance This Walk</div>
       <div class="hud-value" id="hudDist">0.00 km</div>
-      <div class="hud-label" style="margin-top:4px">Territory Gained</div>
+      <div class="hud-label" style="margin-top:4px">Area Captured</div>
       <div class="hud-value" id="hudTerritory" style="font-size:16px;color:#4b9fff">+0 m²</div>
+    </div>
+
+    <!-- ACHIEVEMENTS BADGE — top right of map -->
+    <div class="achievements-overlay" id="achievementsOverlay" onclick="toggleAchievements()">
+      🏅 <span id="achieveCount">0</span>
+    </div>
+    <div class="achievements-panel" id="achievementsPanel">
+      <div class="achievements-panel-title">🏅 Achievements</div>
+      <div id="achievementsList"></div>
+    </div>
+
+    <!-- DEV TOOLS — top left of map -->
+    <div class="dev-tools" id="devTools">
+      <button onclick="devResetProgress()" style="background:#e74c3c;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer">🗑 Reset Me</button>
+      <button onclick="devSpawnRivals()" style="background:#3498db;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer">👥 Spawn Rivals</button>
     </div>
   </div>
 </div>
