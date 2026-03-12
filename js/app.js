@@ -20,7 +20,7 @@ const FIREBASE_CONFIG = {
 // ===== APP VERSION =====
 // Bump this number every time you deploy new changes
 // App will auto-clear cache and force fresh login when version changes
-const APP_VERSION = '1.5';
+const APP_VERSION = '2.0';
 
 // ===== FCM VAPID KEY =====
 // Get this from: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Key pair
@@ -43,12 +43,8 @@ const AVATARS_EMOJI = [
   "🦔","🦥","🦦","🦨","🦘","🦬","🦣","🦒","🦓"
 ];
 
-// Legacy SVG array kept empty — emoji used instead
-const AVATARS_SVG = AVATARS_EMOJI.map(() => '');
 const COLORS = ['#00e5a0','#ff4b6e','#4b9fff','#ffd700','#ff6b35','#a855f7','#ec4899','#14b8a6','#f97316','#84cc16'];
 const CITIES = ['Mumbai','Delhi','Bangalore','Hyderabad','Chennai','Pune','Kolkata','Ahmedabad','Jaipur','Surat'];
-const DECAY_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48 hours
-const DECAY_RATE = 0.10; // 10% per 48hr inactive
 
 // ===== STATE =====
 let state = {
@@ -88,22 +84,7 @@ let db = null; // Firebase database reference
 let deferredInstallPrompt = null;
 
 // ===== FIREBASE INIT =====
-let auth = null;
-let confirmationResult = null;
 
-(function injectWalkCSS() {
-  const style = document.createElement('style');
-  style.textContent = `/* ===== WALKING ANIMATION ===== */
-.tw-avatar-walking .tw-leg-left  { transform-origin: 50% 0%; animation: twWalkLeg 0.5s ease-in-out infinite; }
-.tw-avatar-walking .tw-leg-right { transform-origin: 50% 0%; animation: twWalkLeg 0.5s ease-in-out infinite reverse; }
-.tw-avatar-walking .tw-arm-left  { transform-origin: 50% 0%; animation: twWalkArm 0.5s ease-in-out infinite reverse; }
-.tw-avatar-walking .tw-arm-right { transform-origin: 50% 0%; animation: twWalkArm 0.5s ease-in-out infinite; }
-.tw-avatar-walking               { animation: twBounce 0.5s ease-in-out infinite; }
-@keyframes twWalkLeg { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(22deg)} 75%{transform:rotate(-22deg)} }
-@keyframes twWalkArm { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(18deg)} 75%{transform:rotate(-18deg)} }
-@keyframes twBounce  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }`;
-  document.head.appendChild(style);
-})();
 
 function initFirebase() {
   try {
@@ -149,19 +130,7 @@ function showStep(step) {
   document.getElementById('step-' + step).classList.add('active');
 }
 
-// OTP input helpers
-function otpNext(el, nextIdx) {
-  if (el.value && nextIdx !== null) document.getElementById('otp'+nextIdx).focus();
-  // Auto verify when all 6 filled
-  const otp = [0,1,2,3,4,5].map(i => document.getElementById('otp'+i).value).join('');
-  if (otp.length === 6) verifyOTP();
-}
-
-function otpBack(e, el, prevIdx) {
-  if (e.key === 'Backspace' && !el.value && prevIdx !== null) {
-    document.getElementById('otp'+prevIdx).focus();
-  }
-}
+// OTP helpers removed — no OTP flow used
 
 // ===== LOAD USER FROM FIREBASE (returning users) =====
 function loadUserFromFirebase(uid) {
@@ -331,48 +300,61 @@ function saveMergedTerritoryToFirebase() {
 function listenToOtherUsers() {
   if (!db) return;
 
-  // First load all users to get their steps
   const userStepsMap = {};
+  const locallyCapture = new Set();
+  // Expose so closeTerritory can mark captured rivals
+  window._twLocalCaptures = locallyCapture;
+
+  // Load steps first, THEN attach snapshot listener so steps are populated on first render
   db.ref('users').once('value').then(snap => {
     snap.forEach(child => { userStepsMap[child.key] = child.val().steps || 0; });
-  });
 
-  // Load rival territories via snapshot (fast, one merged polygon per user)
-  db.ref('territory_snapshot').on('value', snapshots => {
-    snapshots.forEach(child => {
-      const uid = child.key;
-      if (uid === state.userId) return;
-      const data = child.val();
-      if (!data || !data.geojson) return;
-      try {
-        const geojson = JSON.parse(data.geojson);
-        const rivalSteps = userStepsMap[uid] || 0;
-        if (!territoryStore[uid]) {
-          territoryStore[uid] = { uid, name: data.name, color: data.color, geojson: null, layer: null, steps: rivalSteps };
-        }
-        territoryStore[uid].geojson = geojson;
-        territoryStore[uid].steps   = rivalSteps;
-        redrawTerritory(uid);
-      } catch(e) { console.warn('Rival snapshot error:', e); }
+    // Attach snapshot listener — userStepsMap is now guaranteed populated
+    db.ref('territory_snapshot').on('value', snapshots => {
+      snapshots.forEach(child => {
+        const uid = child.key;
+        if (uid === state.userId) return;
+        const data = child.val();
+        if (!data || !data.geojson) return;
+        try {
+          const geojson = JSON.parse(data.geojson);
+          const rivalSteps = userStepsMap[uid] || 0;
+
+          if (!territoryStore[uid]) {
+            // First time seeing this rival — load full polygon
+            territoryStore[uid] = { uid, name: data.name, color: data.color, geojson, layer: null, steps: rivalSteps };
+            redrawTerritory(uid);
+          } else if (!locallyCapture.has(uid)) {
+            // Not captured this session — safe to update from Firebase
+            territoryStore[uid].geojson = geojson;
+            territoryStore[uid].steps   = rivalSteps;
+            territoryStore[uid].name    = data.name;
+            territoryStore[uid].color   = data.color;
+            redrawTerritory(uid);
+          }
+          // locallyCapture.has(uid) = we cut their polygon this session — keep local version
+        } catch(e) { console.warn('Rival snapshot error:', e); }
+      });
     });
   });
 
-  // Listen for leaderboard updates
+  // Live leaderboard — only redraw polygons when step count actually changed
   db.ref('users').orderByChild('territory').limitToLast(20).on('value', snapshot => {
     const users = [];
     snapshot.forEach(child => users.push({ uid: child.key, ...child.val() }));
     users.reverse();
-    // Store steps in territoryStore so polygon labels can show them
     users.forEach(u => {
       if (u.uid !== state.userId && territoryStore[u.uid]) {
-        territoryStore[u.uid].steps = u.steps || 0;
-        redrawTerritory(u.uid);
+        const newSteps = u.steps || 0;
+        if (territoryStore[u.uid].steps !== newSteps) {
+          territoryStore[u.uid].steps = newSteps;
+          redrawTerritory(u.uid);
+        }
       }
     });
     renderFirebaseLeaderboard(users);
   });
 }
-
 function renderFirebaseLeaderboard(users) {
   if (!state.user) return;
   const cityUsers = users.filter(u => u.city === state.user.city);
@@ -416,9 +398,11 @@ function createProfile() {
 
   const avatar = document.querySelector('.avatar-option.selected').dataset.avatar || AVATAR_NAMES[0];
   const color = document.querySelector('.color-option.selected').dataset.c;
-  const city = CITIES[Math.floor(Math.random() * CITIES.length)];
+  // City from dropdown if present, else random
+  const cityEl = document.getElementById('citySelect');
+  const city = (cityEl && cityEl.value) ? cityEl.value : CITIES[Math.floor(Math.random() * CITIES.length)];
 
-  state.user = { name, avatar, color, city };
+  state.user = { name, avatar, color, city, bio: '', accessory: 'none', zoneName: '', walkGoal: 5000 };
 
   updateHeaderUI();
   document.getElementById('loginModal').classList.remove('open');
@@ -448,8 +432,9 @@ function closeProfileMenu() {
   document.getElementById('profileMenu').classList.remove('open');
 }
 document.addEventListener('click', e => {
-  if (!document.getElementById('profileMenu').contains(e.target) &&
-      !document.getElementById('profileChip').contains(e.target)) {
+  const menu = document.getElementById('profileMenu');
+  const chip = document.getElementById('profileChip');
+  if (menu && chip && !menu.contains(e.target) && !chip.contains(e.target)) {
     closeProfileMenu();
   }
 });
@@ -502,7 +487,8 @@ function openChangeAvatar() {
   `, () => {
     const sel = document.querySelector('.avatar-change-option.selected');
     if (!sel) return;
-    const newAvatar = sel.dataset.avatarName;
+    // dataset.avatarName may not be set if user never re-tapped — fall back to title attr
+    const newAvatar = sel.dataset.avatarName || sel.title || cur;
     state.user.avatar = newAvatar;
     saveUserToFirebase();
     updateHeaderUI();
@@ -536,7 +522,7 @@ const PRESET_COLORS = ['#00e5a0','#ff4b6e','#4b9fff','#ffd700','#a855f7','#ff6b2
 function openColorPicker() {
   closeProfileMenu();
   const swatches = PRESET_COLORS.map(c =>
-    `<div class="color-swatch${c===state.user.color?' selected':''}" style="background:${c}" onclick="selectColor('${c}',this)"></div>`
+    `<div class="color-swatch${c===state.user.color?' selected':''}" style="background:${c}" data-hex="${c}" onclick="selectColor('${c}',this)"></div>`
   ).join('');
   showMiniModal('🎨 Territory Color', `
     <div class="color-grid">${swatches}</div>
@@ -547,7 +533,8 @@ function openColorPicker() {
   `, () => {
     const custom = document.getElementById('mmCustomColor').value;
     const selected = document.querySelector('.color-swatch.selected');
-    const color = selected ? selected.style.background : custom;
+    // Use dataset.color (hex) not style.background (returns rgb() from browser)
+    const color = selected ? (selected.dataset.hex || custom) : custom;
     state.user.color = color;
     saveUserToFirebase();
     updateHeaderUI();
@@ -757,11 +744,7 @@ function updateHeaderUI() {
   document.getElementById('headerName').textContent = state.user.name;
 }
 
-function loadSavedProfile() {
-  // Profile is now loaded from Firebase via onAuthStateChanged
-  // This function is kept as no-op for compatibility
-  return false;
-}
+
 
 
 function persistState() {
@@ -824,8 +807,6 @@ function getAvatarEmoji(avatarName) {
   const idx = AVATAR_NAMES.indexOf(avatarName);
   return idx >= 0 ? AVATARS_EMOJI[idx] : '🧍';
 }
-// Keep legacy name for any code that calls it
-function getAvatarSVG(avatarName) { return getAvatarEmoji(avatarName); }
 
 // Inject walk keyframes into document head once — Leaflet strips <style> inside divIcon
 (function ensureWalkKeyframes() {
@@ -932,13 +913,7 @@ function placeUserMarker(lat, lng) {
 
 // zoomend registered inside initMap() after map is created
 
-function generatePolygon(cLat, cLng, size, pts) {
-  return Array.from({ length: pts }, (_, i) => {
-    const angle = (i / pts) * 2 * Math.PI;
-    const r = size * (0.7 + Math.random() * 0.6);
-    return [cLat + r * Math.cos(angle), cLng + r * Math.sin(angle)];
-  });
-}
+
 
 // ===== WALK =====
 // ===== AUTO-WALK DETECTION =====
@@ -984,9 +959,10 @@ function startAutoWalkGPS() {
       state.currentLat = lat;
       state.currentLng = lng;
 
-      // Always update marker position with current heading
+      // Always update marker position
       if (state.user) placeUserMarker(lat, lng);
-      if (map) map.panTo([lat, lng]);
+      // Only pan map when walking — don't steal focus when user is browsing map
+      if (map && state.walking) map.panTo([lat, lng]);
 
       // ===== VEHICLE CHECK — ignore completely if in car/bike =====
       // Distance moved since last GPS ping (works indoors when speed=0)
@@ -1085,9 +1061,14 @@ function stopWalk() {
 
   if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
   if (walkInterval) clearInterval(walkInterval);
-  if (state.walkPath.length > 2) { closeTerritory(); }
-  state.walkPath = []; // FIX 9: always clear, even if < 3 points
-  if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+  try {
+    if (state.walkPath.length > 2) { closeTerritory(); }
+  } catch(e) {
+    console.warn('closeTerritory error:', e);
+    state.sessionGain = 0; // ensure reset even on error
+  }
+  state.walkPath = [];
+  if (currentPolyline) { try { map.removeLayer(currentPolyline); } catch(_){} currentPolyline = null; }
 
   document.getElementById('walkBtn').textContent = '▶ START WALK';
   document.getElementById('walkBtn').classList.remove('active');
@@ -1235,8 +1216,6 @@ function closeTerritory() {
   try { newGeoJSON = pathToGeoJSON(newPath); }
   catch(e) { console.warn('Invalid polygon', e); return; }
 
-  const legacyArea = calculateArea(newPath); // kept for reference
-
   // Init user entry if first territory
   if (!territoryStore[uid]) {
     territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
@@ -1269,8 +1248,9 @@ function closeTerritory() {
       state.captures++;
       state.todayCaptures++;
       showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
-      // Notify the rival that their territory was taken
       notifyRivalCapture(rivalUid, state.user.name, capturedM2);
+      // Prevent Firebase listener from restoring their full polygon this session
+      if (window._twLocalCaptures) window._twLocalCaptures.add(rivalUid);
     } catch(e) { console.warn('Capture error:', e); }
   });
 
@@ -1311,6 +1291,8 @@ function closeTerritory() {
   setTimeout(() => flash.classList.remove('flash'), 300);
 
   safe('hudTerritory', `+${state.sessionGain} m²`);
+  safe('hudSteps',     state.sessionSteps.toLocaleString());
+  safe('hudDist',      state.sessionDist.toFixed(2) + ' km');
   updateStats();
 
   // Show a brief "+Xm² claimed" floating tag at the user's current position
@@ -1353,74 +1335,11 @@ function persistTerritoryStore(uid) {
   } catch(e) {}
 }
 
-// Restore saved territory — from Firebase first, fallback to localStorage
-function restoreTerritoryFromStorage() {
-  const uid = state.userId;
-  if (!uid) return;
-
-  // Try Firebase first (works across devices)
-  if (db) {
-    db.ref('territories/' + uid).once('value').then(snap => {
-      const data = snap.val();
-      if (!data) { restoreTerritoryFromLocal(uid); return; }
-
-      if (!territoryStore[uid]) {
-        territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
-      }
-
-      // Merge all saved polygons back into one GeoJSON
-      Object.values(data).forEach(poly => {
-        if (!poly || !poly.path) return;
-        try {
-          const newGeo = pathToGeoJSON(poly.path);
-          if (territoryStore[uid].geojson) {
-            territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeo);
-          } else {
-            territoryStore[uid].geojson = newGeo;
-          }
-        } catch(e) {}
-      });
-
-      if (territoryStore[uid].geojson) {
-        // Update territory area from restored GeoJSON
-        state.territory = Math.floor(turf.area(territoryStore[uid].geojson));
-        redrawTerritory(uid);
-        updateStats();
-        showNotif('Territory restored! 🗺️');
-      }
-    }).catch(() => restoreTerritoryFromLocal(uid));
-  } else {
-    restoreTerritoryFromLocal(uid);
-  }
-}
-
-// Fallback: restore from localStorage
-function restoreTerritoryFromLocal(uid) {
-  try {
-    const saved = JSON.parse(localStorage.getItem('tw_geojson_' + uid));
-    if (!saved) return;
-    if (!territoryStore[uid]) {
-      territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
-    }
-    territoryStore[uid].geojson = saved;
-    state.territory = Math.floor(turf.area(saved));
-    redrawTerritory(uid);
-    updateStats();
-  } catch(e) { console.warn('Could not restore territory:', e); }
-}
+// restoreTerritoryFromStorage removed — restoreTerritoryFromFirebase() used instead
 
 // registerRivalTerritory removed — rivals loaded via territory_snapshot
 
-function calculateArea(path) {
-  let area = 0;
-  const n = path.length;
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    area += path[i][1] * path[j][0];
-    area -= path[j][1] * path[i][0];
-  }
-  return Math.max(1, Math.abs(area / 2) * 1e10 | 0);
-}
+
 
 // ===== DECAY =====
 function startDecay() {
@@ -1461,11 +1380,12 @@ function updateStats() {
   safe('statTodayCaptures', state.todayCaptures);
 
   // HUD
-  safe('hudDist', state.sessionDist.toFixed(2) + ' km');
+  safe('hudDist',      state.sessionDist.toFixed(2) + ' km');
+  safe('hudSteps',     state.sessionSteps.toLocaleString());
   safe('hudTerritory', '+' + state.sessionGain + ' m²');
 
-  // Refresh polygon label so steps count updates live on map
-  if (state.userId && territoryStore[state.userId]) redrawTerritory(state.userId);
+  // Only redraw polygon label when NOT walking (avoid per-ping redraws)
+  // Label is refreshed on closeTerritory() and stopWalk() instead
 }
 
 function formatNum(n) {
@@ -1571,11 +1491,22 @@ function toggleSidebar() {
 }
 
 // ===== NOTIFICATION =====
+let _notifQueue = [];
+let _notifShowing = false;
 function showNotif(msg) {
+  _notifQueue.push(msg);
+  if (!_notifShowing) _drainNotifQueue();
+}
+function _drainNotifQueue() {
+  if (!_notifQueue.length) { _notifShowing = false; return; }
+  _notifShowing = true;
   const el = document.getElementById('notif');
-  el.textContent = msg;
+  el.textContent = _notifQueue.shift();
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(_drainNotifQueue, 300); // brief gap between notifications
+  }, 2800);
 }
 
 // ===== PWA INSTALL =====
@@ -1782,18 +1713,19 @@ async function notifyRivalCapture(victimUid, attackerName, capturedM2) {
 // Poll Firebase for unread notifications on startup
 function listenForNotifications() {
   if (!db || !state.userId) return;
+  const sessionStart = Date.now(); // only show notifications from THIS login onwards
   db.ref(`notifications/${state.userId}`)
-    .orderByChild('read').equalTo(false)
+    .orderByChild('createdAt').startAt(sessionStart - 5000) // 5s buffer
     .on('child_added', snap => {
       const n = snap.val();
-      if (!n) return;
-      // Show as local notification or in-app toast
+      if (!n || n.read) return;
+      // Only show if notification arrived after we logged in
+      if (n.createdAt < sessionStart - 5000) { snap.ref.update({ read: true }); return; }
       if (Notification.permission === 'granted') {
         sendLocalNotification(n.title, n.body, 'tw-capture-' + snap.key);
       } else {
-        showNotif(`${n.title}: ${n.body}`);
+        showNotif(`⚔️ ${n.body}`);
       }
-      // Mark as read
       snap.ref.update({ read: true });
     });
 }
@@ -1820,12 +1752,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== VERSION CHECK — clears cache if app was updated =====
   const storedVersion = localStorage.getItem('tw_version');
   if (storedVersion !== APP_VERSION) {
-    // New version detected — clear all local storage and force fresh login
     localStorage.clear();
     localStorage.setItem('tw_version', APP_VERSION);
+    // Also clear IndexedDB walked-today flag
+    try {
+      const req = indexedDB.open('terrawalk-sw', 1);
+      req.onsuccess = e => {
+        try { e.target.result.transaction('kv','readwrite').objectStore('kv').delete('walkedToday'); } catch(_){}
+      };
+    } catch(_) {}
     document.getElementById('loginModal').classList.add('open');
     showNotif('App updated! Please log in again 🔄');
-    return; // stop here, show login screen
+    return;
   }
 
   // ===== AUTO-LOGIN: restore session from localStorage =====
