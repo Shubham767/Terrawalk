@@ -22,6 +22,11 @@ const FIREBASE_CONFIG = {
 // App will auto-clear cache and force fresh login when version changes
 const APP_VERSION = '1.5';
 
+// ===== FCM VAPID KEY =====
+// Get this from: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Key pair
+// Paste the full key string below
+const VAPID_KEY = 'PASTE_YOUR_VAPID_KEY_HERE';
+
 // ===== CONSTANTS =====
 // (legacy AVATARS array removed)
 const AVATAR_NAMES = [
@@ -205,10 +210,13 @@ function loadUserFromFirebase(uid) {
       initMap(/* onReady */ () => {
         restoreTerritoryFromFirebase(uid);
         listenToOtherUsers();
+        listenForNotifications();
         renderLeaderboards();
         startDecay();
         updateStats();
         checkAchievements();
+        // Show notification prompt if not yet granted
+        setTimeout(checkNotifPrompt, 2000);
       });
       showNotif('Welcome back, ' + state.user.name + '! Your territory is loading... 🗺️');
     } else {
@@ -416,10 +424,12 @@ function createProfile() {
   document.getElementById('loginModal').classList.remove('open');
   initMap(() => {
     listenToOtherUsers();
+    listenForNotifications();
     renderLeaderboards();
     startDecay();
     updateStats();
     checkAchievements();
+    setTimeout(checkNotifPrompt, 2000);
   });
   saveUserToFirebase();
   showNotif('Welcome ' + name + '! Walk to claim your ground 🗺️');
@@ -644,6 +654,135 @@ function loadSavedProfile() {
   // Profile is now loaded from Firebase via onAuthStateChanged
   // This function is kept as no-op for compatibility
   return false;
+}
+
+// ===== DEV TOOLS =====
+function devResetProgress() {
+  if (!confirm('Reset ALL your progress? This cannot be undone.')) return;
+  if (!state.userId || !db) return;
+  db.ref('users/' + state.userId).remove();
+  db.ref('territories/' + state.userId).remove();
+  db.ref('territory_snapshot/' + state.userId).remove();
+  localStorage.removeItem('tw_uid');
+  localStorage.removeItem('tw_phone');
+  showNotif('Progress reset! Reloading...');
+  setTimeout(() => window.location.reload(), 1500);
+}
+
+function devSpawnRivals() {
+  if (!map) { showNotif('Map not ready'); return; }
+  if (!state.currentLat) {
+    state.currentLat = map.getCenter().lat;
+    state.currentLng = map.getCenter().lng;
+  }
+  const rivals = [
+    { name: 'Arjun', color: '#ff4b6e' },
+    { name: 'Priya', color: '#a855f7' },
+    { name: 'Karan', color: '#ffd700' },
+    { name: 'Rahul', color: '#00d4ff' },
+  ];
+  rivals.forEach((r, i) => {
+    const offLat = (Math.random() - 0.5) * 0.002;
+    const offLng = (Math.random() - 0.5) * 0.002;
+    const cLat = state.currentLat + offLat;
+    const cLng = state.currentLng + offLng;
+    const path = generatePolygon(cLat, cLng, 0.0006, 8);
+    if (!territoryStore['dev_' + i]) {
+      territoryStore['dev_' + i] = { uid: 'dev_' + i, name: r.name, color: r.color, geojson: null, layer: null, steps: Math.floor(Math.random()*5000) };
+    }
+    try {
+      const gj = pathToGeoJSON(path);
+      territoryStore['dev_' + i].geojson = gj;
+      redrawTerritory('dev_' + i);
+    } catch(e) {}
+  });
+  showNotif('4 rivals spawned nearby 👥');
+}
+
+function devDemoWalk() {
+  if (!state.user) { showNotif('Login first'); return; }
+  if (!map)        { showNotif('Map not ready'); return; }
+
+  if (demoRunning) {
+    demoRunning = false;
+    clearInterval(demoInterval);
+    demoInterval = null;
+    state.walking = false;
+    if (state.walkPath.length > 2) { closeTerritory(); }
+    state.walkPath = [];
+    if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+    document.getElementById('walkBtn').textContent = '▶ START WALK';
+    document.getElementById('walkBtn').classList.remove('active');
+    document.getElementById('walkingHud').classList.remove('visible');
+    document.getElementById('statusBadge').textContent = '🟢 READY';
+    document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
+    if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
+    showNotif('Demo stopped');
+    return;
+  }
+
+  const cLat = state.currentLat || map.getCenter().lat;
+  const cLng = state.currentLng || map.getCenter().lng;
+
+  state.walking = true;
+  state.walkPath = [];
+  state.sessionGain = 0;
+  state.sessionDist = 0;
+  state.sessionSteps = 0;
+  if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+  document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
+  document.getElementById('walkBtn').classList.add('active');
+  document.getElementById('walkingHud').classList.add('visible');
+  document.getElementById('statusBadge').textContent = '🔴 WALKING';
+
+  demoRunning = true;
+  document.getElementById('devDemoBtn').textContent = '⏹ Stop Demo';
+  showNotif('🎮 Demo walk started!');
+
+  const R = 0.0007;
+  const TOTAL = 80;
+  let step = 0;
+
+  state.currentLat = cLat + R;
+  state.currentLng = cLng;
+  placeUserMarker(state.currentLat, state.currentLng);
+  map.setView([state.currentLat, state.currentLng], 17);
+
+  demoInterval = setInterval(() => {
+    if (!demoRunning) return;
+    step++;
+    const t = (step / TOTAL) * 2 * Math.PI;
+    const lat = cLat + R * Math.cos(t);
+    const lng = cLng + R * Math.sin(t);
+    const dLat = lat - state.currentLat;
+    const dLng = lng - state.currentLng;
+    currentHeading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
+    state.currentLat = lat;
+    state.currentLng = lng;
+    addWalkPoint(lat, lng);
+    placeUserMarker(lat, lng);
+    map.panTo([lat, lng]);
+    state.steps += 10; state.todaySteps += 10; state.sessionSteps += 10;
+    state.distance += 0.005; state.todayDistance += 0.005; state.sessionDist += 0.005;
+    updateStats();
+    if (step >= TOTAL) {
+      demoRunning = false;
+      clearInterval(demoInterval);
+      demoInterval = null;
+      document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
+      state.walking = false;
+      if (state.walkPath.length > 2) { closeTerritory(); }
+      state.walkPath = [];
+      if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
+      document.getElementById('walkBtn').textContent = '▶ START WALK';
+      document.getElementById('walkBtn').classList.remove('active');
+      document.getElementById('walkingHud').classList.remove('visible');
+      document.getElementById('statusBadge').textContent = '🟢 READY';
+      placeUserMarker(state.currentLat, state.currentLng);
+      showNotif('Demo complete! Territory claimed 🎉');
+      saveUserToFirebase();
+    }
+  }, 130);
 }
 
 function persistState() {
@@ -893,6 +1032,7 @@ function startWalk(auto = false) {
   state.sessionGain  = 0;
   state.sessionDist  = 0;
   state.sessionSteps = 0;
+  markWalkedToday(); // tell SW not to send reminder today
 
   document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
   document.getElementById('walkBtn').classList.add('active');
@@ -1097,6 +1237,8 @@ function closeTerritory() {
       state.captures++;
       state.todayCaptures++;
       showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
+      // Notify the rival that their territory was taken
+      notifyRivalCapture(rivalUid, state.user.name, capturedM2);
     } catch(e) { console.warn('Capture error:', e); }
   });
 
@@ -1416,6 +1558,212 @@ function dismissInstall() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js')
         .catch(e => console.warn('SW registration failed:', e));
+}
+
+// ===== NOTIFICATION PROMPT (for users who haven't granted permission) =====
+function checkNotifPrompt() {
+  if (!('Notification' in window)) return; // browser doesn't support it
+  const prompt = document.getElementById('notifPrompt');
+  if (!prompt) return;
+
+  if (Notification.permission === 'granted') {
+    // Already on — hide prompt permanently
+    prompt.style.display = 'none';
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    // User hard-blocked — don't nag, show nothing
+    prompt.style.display = 'none';
+    return;
+  }
+  // 'default' — not yet decided — show prompt unless dismissed this session
+  const dismissedAt = localStorage.getItem('tw_notif_dismissed');
+  if (dismissedAt) {
+    const hoursSince = (Date.now() - parseInt(dismissedAt)) / 3600000;
+    if (hoursSince < 24) {
+      // Dismissed less than 24 hours ago — don't show again until next login
+      prompt.style.display = 'none';
+      return;
+    }
+  }
+  prompt.style.display = 'flex';
+}
+
+async function promptEnableNotifications() {
+  const prompt = document.getElementById('notifPrompt');
+  if (prompt) prompt.style.display = 'none';
+  // Trigger the real browser permission dialog
+  await initNotifications();
+  if (Notification.permission === 'granted') {
+    showNotif('🔔 Notifications on! Rivals will not catch you off guard.');
+  } else {
+    showNotif('Notifications blocked. Enable in browser settings to get alerts.');
+  }
+}
+
+function dismissNotifPrompt() {
+  const prompt = document.getElementById('notifPrompt');
+  if (prompt) prompt.style.display = 'none';
+  // Remember dismissal — show again after 24 hours (next login)
+  localStorage.setItem('tw_notif_dismissed', Date.now().toString());
+}
+
+// ===== PUSH NOTIFICATIONS =====
+let messaging = null;
+
+async function initNotifications() {
+  // Only proceed if browser supports notifications
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+  if (typeof firebase === 'undefined' || !firebase.messaging) return;
+  if (VAPID_KEY === 'PASTE_YOUR_VAPID_KEY_HERE') return; // not configured yet
+
+  try {
+    messaging = firebase.messaging();
+
+    // Request permission — ask politely, don't interrupt on first open
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.log('Notification permission denied');
+      return;
+    }
+
+    // Get FCM token and save to Firebase under this user
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (token && state.userId && db) {
+      db.ref(`fcm_tokens/${state.userId}`).set({
+        token,
+        updatedAt: Date.now(),
+        name: state.user?.name || '',
+      });
+      localStorage.setItem('tw_fcm_token', token);
+    }
+
+    // Handle foreground messages (app is open)
+    messaging.onMessage(payload => {
+      const { title, body } = payload.notification || {};
+      showNotif(`🔔 ${body || title}`);
+    });
+
+    // Register periodic sync for smart daily reminders
+    registerDailyReminder();
+
+  } catch(e) {
+    console.warn('Notification init failed:', e);
+  }
+}
+
+// Register periodic background sync (fires ~once/day when browser allows)
+async function registerDailyReminder() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if ('periodicSync' in reg) {
+      await reg.periodicSync.register('tw-daily-reminder', {
+        minInterval: 12 * 60 * 60 * 1000 // at most every 12 hours
+      });
+    } else {
+      // Fallback: use localStorage + setTimeout to schedule in-app reminder
+      scheduleInAppReminder();
+    }
+  } catch(e) {
+    scheduleInAppReminder();
+  }
+}
+
+// Fallback: in-app reminder using setTimeout (works without periodic sync)
+function scheduleInAppReminder() {
+  const now = new Date();
+  const hour = now.getHours();
+
+  // Find next reminder window: 8am or 6pm
+  let next = new Date(now);
+  if (hour < 8) {
+    next.setHours(8, 0, 0, 0);
+  } else if (hour < 18) {
+    next.setHours(18, 0, 0, 0);
+  } else {
+    // Past 6pm — schedule for 8am tomorrow
+    next.setDate(next.getDate() + 1);
+    next.setHours(8, 0, 0, 0);
+  }
+
+  const msUntil = next.getTime() - now.getTime();
+  setTimeout(() => {
+    // Only fire if they haven't walked today
+    if ((state.todaySteps || 0) < 100) {
+      sendLocalNotification(
+        'TerraWalk 🗺️',
+        "You haven't walked today — your territory is waiting! 🚶",
+        'tw-daily'
+      );
+    }
+    // Reschedule for next window
+    scheduleInAppReminder();
+  }, msUntil);
+}
+
+// Send a local notification via Service Worker (no server needed)
+async function sendLocalNotification(title, body, tag = 'tw-notif') {
+  try {
+    if (Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification(title, {
+      body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      tag,
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data: { url: '/' }
+    });
+  } catch(e) {
+    console.warn('Local notification failed:', e);
+  }
+}
+
+// Called when a rival captures territory — notifies the victim via Firebase
+async function notifyRivalCapture(victimUid, attackerName, capturedM2) {
+  if (!db) return;
+  // Write a notification record to Firebase — victim's device reads it on next open
+  // (Full real-time push requires a Cloud Function; this is a best-effort approach)
+  db.ref(`notifications/${victimUid}`).push({
+    type: 'capture',
+    title: 'Territory Under Attack! ⚔️',
+    body: `${attackerName} captured ${capturedM2} m² of your territory!`,
+    createdAt: Date.now(),
+    read: false
+  });
+}
+
+// Poll Firebase for unread notifications on startup
+function listenForNotifications() {
+  if (!db || !state.userId) return;
+  db.ref(`notifications/${state.userId}`)
+    .orderByChild('read').equalTo(false)
+    .on('child_added', snap => {
+      const n = snap.val();
+      if (!n) return;
+      // Show as local notification or in-app toast
+      if (Notification.permission === 'granted') {
+        sendLocalNotification(n.title, n.body, 'tw-capture-' + snap.key);
+      } else {
+        showNotif(`${n.title}: ${n.body}`);
+      }
+      // Mark as read
+      snap.ref.update({ read: true });
+    });
+}
+
+// Mark walked today in IndexedDB (read by service worker for smart reminder)
+async function markWalkedToday() {
+  try {
+    const req = indexedDB.open('terrawalk-sw', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
+    req.onsuccess = e => {
+      const db = e.target.result;
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(new Date().toDateString(), 'walkedToday');
+    };
+  } catch(_) {}
 }
 
 // ===== BOOT =====
