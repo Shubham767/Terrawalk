@@ -361,17 +361,38 @@ header {
 /* ===== WALKING HUD ===== */
 .walking-hud {
   position: absolute;
-  bottom: 24px;
-  right: 16px;
-  background: var(--surface);
+  bottom: 80px;      /* above the Stop Walk FAB */
+  right: 12px;
+  background: rgba(15,17,23,0.92);
   border: 1px solid var(--accent);
   border-radius: 16px;
-  padding: 12px 18px;
+  padding: 10px 12px;
   z-index: 400;
   display: none;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 0 30px rgba(0,229,160,0.2);
+  box-shadow: 0 0 24px rgba(0,229,160,0.18);
+  backdrop-filter: blur(8px);
+  min-width: 200px;
+}
+.hud-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.hud-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+}
+.hud-tile + .hud-tile {
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
 }
 .walking-hud.visible { display: flex; }
 
