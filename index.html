@@ -64,6 +64,12 @@
       <div>
         <div class="modal-label">Your Warrior Name</div>
         <input type="text" id="usernameInput" placeholder="Enter your name..." maxlength="20"/>
+        <select id="citySelect" style="width:100%;margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:var(--font-body)">
+          <option value="">📍 Select your city</option>
+          <option>Mumbai</option><option>Delhi</option><option>Bangalore</option>
+          <option>Hyderabad</option><option>Chennai</option><option>Pune</option>
+          <option>Kolkata</option><option>Ahmedabad</option><option>Jaipur</option><option>Surat</option>
+        </select>
       </div>
       <div>
         <div class="modal-label">Choose Your Avatar</div>
@@ -236,10 +242,20 @@
   <div class="map-container">
     <div id="map"></div>
     <div class="walking-hud" id="walkingHud">
-      <div class="hud-label">Distance This Walk</div>
-      <div class="hud-value" id="hudDist">0.00 km</div>
-      <div class="hud-label" style="margin-top:4px">Area Captured</div>
-      <div class="hud-value" id="hudTerritory" style="font-size:16px;color:#4b9fff">+0 m²</div>
+      <div class="hud-row">
+        <div class="hud-tile">
+          <div class="hud-label">Distance</div>
+          <div class="hud-value" id="hudDist">0.00 km</div>
+        </div>
+        <div class="hud-tile">
+          <div class="hud-label">Steps</div>
+          <div class="hud-value" id="hudSteps" style="color:#00e5a0">0</div>
+        </div>
+        <div class="hud-tile">
+          <div class="hud-label">Area</div>
+          <div class="hud-value" id="hudTerritory" style="color:#4b9fff">+0 m²</div>
+        </div>
+      </div>
     </div>
 
     <!-- FLOATING STOP WALK BUTTON — visible only when walking, centre-bottom of map -->
