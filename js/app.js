@@ -856,6 +856,12 @@ function getAvatarSVG(avatarName) { return getAvatarEmoji(avatarName); }
     .tw-walking-body { animation: twWalk 0.5s ease-in-out infinite !important; transform-origin: bottom center; }
     .tw-shadow-pulse  { animation: twShadowPulse 0.5s ease-in-out infinite !important; }
     .tw-idle-body     { animation: twWalkIdle 2s ease-in-out infinite; transform-origin: bottom center; }
+    @keyframes mapTagFade {
+      0%   { opacity:0; transform:translateY(0px); }
+      15%  { opacity:1; transform:translateY(-8px); }
+      70%  { opacity:1; transform:translateY(-16px); }
+      100% { opacity:0; transform:translateY(-24px); }
+    }
   `;
   document.head.appendChild(s);
 })();
@@ -998,22 +1004,24 @@ function startAutoWalkGPS() {
         return;
       }
 
-      // Detect walking via speed OR distance moved between pings
-      const isWalkingNow = speed >= WALK_SPEED_MIN || distMoved >= WALK_DIST_MIN;
+      // Require BOTH speed threshold AND distance to avoid GPS noise triggering steps
+      // GPS noise on a stationary phone = 1–4m per ping, so we use 5m min + speed confirmation
+      const isWalkingNow = (speed >= WALK_SPEED_MIN && distMoved >= 1.5)
+                        || (distMoved >= 5.0); // unambiguous movement even if speed not reported
 
       if (isWalkingNow) {
         // Moving — clear still timer
         if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
 
-        // Auto start walk if not already walking
+        // Auto start walk — only if not already walking (FIX 10: don't reset mid-walk)
         if (!state.walking) startWalk(true);
 
-        // Record path + count steps (lifetime + today)
+        // Record path + accurate stats
         addWalkPoint(lat, lng);
-        const newSteps = estimateSteps(speed || (distMoved / 2));
-        const newDist  = Math.max(speed * 2, distMoved) / 1000;
-        state.steps       += newSteps;
-        state.distance    += newDist;
+        const newSteps = estimateSteps(distMoved); // FIX 2: use real distance, not random
+        const newDist  = distMoved / 1000;          // FIX 3: just use real distMoved in km
+        state.steps         += newSteps;
+        state.distance      += newDist;
         state.todaySteps    += newSteps;
         state.todayDistance += newDist;
         state.sessionSteps  += newSteps;
@@ -1049,6 +1057,8 @@ function startWalk(auto = false) {
   document.getElementById('walkBtn').classList.add('active');
   document.getElementById('walkingHud').classList.add('visible');
   document.getElementById('statusBadge').textContent = '🔴 WALKING';
+  const fab = document.getElementById('stopWalkFab');
+  if (fab) fab.style.display = 'block';
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   if (!auto) {
@@ -1075,12 +1085,16 @@ function stopWalk() {
 
   if (stillTimer) { clearTimeout(stillTimer); stillTimer = null; }
   if (walkInterval) clearInterval(walkInterval);
-  if (state.walkPath.length > 2) { closeTerritory(); state.walkPath = []; }
+  if (state.walkPath.length > 2) { closeTerritory(); }
+  state.walkPath = []; // FIX 9: always clear, even if < 3 points
+  if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
 
   document.getElementById('walkBtn').textContent = '▶ START WALK';
   document.getElementById('walkBtn').classList.remove('active');
   document.getElementById('walkingHud').classList.remove('visible');
   document.getElementById('statusBadge').textContent = '🟢 READY';
+  const fab = document.getElementById('stopWalkFab');
+  if (fab) fab.style.display = 'none';
   if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
 
   updateStats();
@@ -1089,14 +1103,17 @@ function stopWalk() {
   saveUserToFirebase();
   saveMergedTerritoryToFirebase();
   const gained = state.sessionGain;
-  state.sessionGain = 0;
+  state.sessionGain  = 0;  // FIX 5: always reset session counters on stop
+  state.sessionDist  = 0;
+  state.sessionSteps = 0;
   if (gained > 0) showNotif(`Walk done! +${gained} m² claimed 🎉`);
   else showNotif('Walk stopped. Keep walking to claim territory! 🗺️');
 }
 
-function estimateSteps(speed) {
-  if (!speed || speed <= 0) return Math.floor(Math.random() * 5) + 8;
-  return Math.floor(speed * 1.4 * 2); // ~1.4 steps/meter
+function estimateSteps(distMetres) {
+  if (!distMetres || distMetres <= 0) return 0;
+  // Average stride = ~0.75m, so steps = distance / 0.75
+  return Math.max(1, Math.floor(distMetres / 0.75));
 }
 
 function addWalkPoint(lat, lng) {
@@ -1190,6 +1207,7 @@ function redrawTerritory(uid) {
           text-align:center;
           line-height:1.6;
           white-space:nowrap;
+          transform:translate(-50%, -50%);
           text-shadow: 0 0 8px ${entry.color}, 0 0 2px rgba(0,0,0,0.9);
         ">
           <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}${entry.zoneName ? ' · <span style=\'font-size:9px;font-weight:500\'>' + entry.zoneName + '</span>' : ''}</div>
@@ -1197,7 +1215,7 @@ function redrawTerritory(uid) {
           <div style="font-size:9px;font-weight:600;color:${textColor}">${stepsCount.toLocaleString()} steps</div>
         </div>`,
       className: '',
-      iconAnchor: [40, 24]
+      iconAnchor: [0, 0]  // centred by CSS text-align:center + transform
     });
     return L.marker(center, { icon: labelIcon, interactive: false });
   });
@@ -1217,12 +1235,14 @@ function closeTerritory() {
   try { newGeoJSON = pathToGeoJSON(newPath); }
   catch(e) { console.warn('Invalid polygon', e); return; }
 
-  const newArea = calculateArea(newPath);
+  const legacyArea = calculateArea(newPath); // kept for reference
 
   // Init user entry if first territory
   if (!territoryStore[uid]) {
     territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
   }
+
+  let capturedThisWalk = 0; // FIX 8: track to avoid double-counting with realArea
 
   // ---- CAPTURE: subtract overlap from each rival ----
   Object.keys(territoryStore).forEach(rivalUid => {
@@ -1242,9 +1262,10 @@ function closeTerritory() {
       rival.geojson = remaining || null;
       redrawTerritory(rivalUid); // redraw rival with reduced territory
 
-      state.territory += capturedM2;
+      capturedThisWalk     += capturedM2;
+      state.territory      += capturedM2;
       state.todayTerritory += capturedM2;
-      state.sessionGain += capturedM2;
+      state.sessionGain    += capturedM2;
       state.captures++;
       state.todayCaptures++;
       showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
@@ -1269,11 +1290,12 @@ function closeTerritory() {
     territoryStore[uid].geojson = newGeoJSON;
   }
 
-  // Add new walk area to stats
-  const realArea = Math.floor(turf.area(newGeoJSON));
-  state.territory += realArea;
-  state.todayTerritory += realArea;
-  state.sessionGain += realArea;
+  // FIX 8: Add only the genuinely NEW area — exclude already-counted captured overlap
+  const rawArea  = Math.floor(turf.area(newGeoJSON));
+  const newArea  = Math.max(0, rawArea - capturedThisWalk);
+  state.territory      += newArea;
+  state.todayTerritory += newArea;
+  state.sessionGain    += newArea;
 
   // Redraw user territory as one clean merged polygon
   redrawTerritory(uid);
@@ -1288,8 +1310,37 @@ function closeTerritory() {
   flash.classList.add('flash');
   setTimeout(() => flash.classList.remove('flash'), 300);
 
-  document.getElementById('hudTerritory').textContent = `+${state.sessionGain} m²`;
+  safe('hudTerritory', `+${state.sessionGain} m²`);
   updateStats();
+
+  // Show a brief "+Xm² claimed" floating tag at the user's current position
+  if (state.currentLat && newArea > 0) {
+    showMapTag(state.currentLat, state.currentLng, `+${newArea} m² 🗺️`, state.user.color);
+  }
+}
+
+// Floating tag that appears at a map position then fades out
+function showMapTag(lat, lng, text, color) {
+  const tagIcon = L.divIcon({
+    html: `<div style="
+      background:rgba(0,0,0,0.82);
+      color:${color};
+      border:1px solid ${color};
+      border-radius:20px;
+      padding:4px 10px;
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+      pointer-events:none;
+      animation:mapTagFade 2.2s ease forwards;
+      text-shadow:0 0 6px ${color};
+      font-family:var(--font-body);
+    ">${text}</div>`,
+    className: '',
+    iconAnchor: [0, 0]
+  });
+  const marker = L.marker([lat, lng], { icon: tagIcon, interactive: false }).addTo(map);
+  setTimeout(() => { try { map.removeLayer(marker); } catch(_) {} }, 2300);
 }
 
 // Persist territory GeoJSON to localStorage
@@ -1358,24 +1409,7 @@ function restoreTerritoryFromLocal(uid) {
   } catch(e) { console.warn('Could not restore territory:', e); }
 }
 
-// Register a rival's territory into the store (called from Firebase listener)
-function registerRivalTerritory(uid, name, color, path, steps = 0) {
-  if (uid === state.userId) return;
-  try {
-    const newGeoJSON = pathToGeoJSON(path);
-    if (!territoryStore[uid]) {
-      territoryStore[uid] = { uid, name, color, geojson: null, layer: null, steps };
-    } else {
-      territoryStore[uid].steps = steps; // update steps if already exists
-    }
-    if (territoryStore[uid].geojson) {
-      territoryStore[uid].geojson = turf.union(territoryStore[uid].geojson, newGeoJSON);
-    } else {
-      territoryStore[uid].geojson = newGeoJSON;
-    }
-    redrawTerritory(uid);
-  } catch(e) { console.warn('Register rival error:', e); }
-}
+// registerRivalTerritory removed — rivals loaded via territory_snapshot
 
 function calculateArea(path) {
   let area = 0;
