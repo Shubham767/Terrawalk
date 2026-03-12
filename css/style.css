@@ -857,3 +857,58 @@ input[type="text"]:focus { border-color: var(--accent); }
 }
 
 
+
+/* ===== NOTIFICATION PROMPT ===== */
+.notif-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(0,229,160,0.07), rgba(75,159,255,0.07));
+  border: 1px solid rgba(0,229,160,0.25);
+  border-radius: 12px;
+  padding: 10px 12px;
+  animation: fadeSlideIn 0.3s ease;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notif-prompt-icon { font-size: 20px; flex-shrink: 0; }
+.notif-prompt-text { flex: 1; min-width: 0; }
+.notif-prompt-title { font-size: 12px; font-weight: 700; color: var(--text); }
+.notif-prompt-sub   { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+.notif-prompt-btn {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  font-family: var(--font-body);
+}
+.notif-prompt-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  line-height: 1;
+}
+.notif-prompt-dismiss:hover { color: var(--text); }
+
+/* ===== DEV TOOLS ===== */
+.dev-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 900;
+}
