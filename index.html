@@ -124,6 +124,9 @@
         🎯 <span>Daily Walk Goal</span>
         <span id="pmWalkGoal" style="font-size:10px;opacity:0.5;margin-left:auto">5,000 steps</span>
       </div>
+      <div class="profile-menu-item" onclick="shareApp()" style="border-top:1px solid var(--border);margin-top:4px;padding-top:12px">
+        🔗 <span>Invite Friends</span>
+      </div>
       <div class="profile-menu-item profile-menu-logout" onclick="logout()">
         🚪 <span>Logout</span>
       </div>
@@ -237,13 +240,6 @@
       <div class="hud-value" id="hudDist">0.00 km</div>
       <div class="hud-label" style="margin-top:4px">Area Captured</div>
       <div class="hud-value" id="hudTerritory" style="font-size:16px;color:#4b9fff">+0 m²</div>
-    </div>
-
-    <!-- DEV TOOLS — top left of map -->
-    <div class="dev-tools" id="devTools">
-      <button onclick="devResetProgress()" style="background:#e74c3c;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation">🗑 Reset</button>
-      <button onclick="devSpawnRivals()" style="background:#3498db;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation">👥 Rivals</button>
-      <button id="devDemoBtn" onclick="devDemoWalk()" style="background:#27ae60;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;touch-action:manipulation">🚶 Demo Walk</button>
     </div>
 
     <!-- ACHIEVEMENTS BADGE — top right of map -->
