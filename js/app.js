@@ -379,7 +379,7 @@ function listenToOtherUsers() {
     });
   });
 
-  // Live leaderboard — only redraw polygons when step count actually changed
+  // Live leaderboard — top 20 by all-time territory
   db.ref('users').orderByChild('territory').limitToLast(20).on('value', snapshot => {
     const users = [];
     snapshot.forEach(child => users.push({ uid: child.key, ...child.val() }));
@@ -394,8 +394,15 @@ function listenToOtherUsers() {
       }
     });
     renderFirebaseLeaderboard(users);
-    updateWalkersOnline(users);
-    renderTopTodayList(users);
+  });
+
+  // Separate query for today's walkers — uses todaySteps index, no limitToLast cap
+  // Fetches ALL users who have walked today (todaySteps > 0), not just top-20 territory holders
+  db.ref('users').orderByChild('todaySteps').startAt(1).on('value', snapshot => {
+    const todayWalkers = [];
+    snapshot.forEach(child => todayWalkers.push({ uid: child.key, ...child.val() }));
+    updateWalkersOnline(todayWalkers);
+    renderTopTodayList(todayWalkers);
   });
 }
 function renderFirebaseLeaderboard(users) {
@@ -406,12 +413,9 @@ function renderFirebaseLeaderboard(users) {
 }
 // ===== WALKERS ONLINE TODAY =====
 function updateWalkersOnline(users) {
-  const todayStr = new Date().toDateString();
-  const midnight = new Date(); midnight.setHours(0,0,0,0);
-  const midnightMs = midnight.getTime();
-
-  // Count users whose updatedAt is after midnight today
-  const onlineCount = users.filter(u => (u.updatedAt || 0) >= midnightMs).length;
+  // Count users who have walked today — todaySteps > 0 is the reliable signal
+  // (already filtered by the query, but double-check here for safety)
+  const onlineCount = users.filter(u => (u.todaySteps || 0) > 0).length;
   const el = document.getElementById('walkersOnlineCount');
   if (el) el.textContent = onlineCount;
 }
@@ -422,9 +426,9 @@ function renderTopTodayList(users) {
   if (!el) return;
 
   // Sort by todaySteps descending, take top 5
-  const todayStr = new Date().toDateString();
+  // No date string comparison — query already filtered to todaySteps > 0
   const ranked = users
-    .filter(u => u.todayDate === todayStr && (u.todaySteps || 0) > 0)
+    .filter(u => (u.todaySteps || 0) > 0)
     .sort((a, b) => (b.todaySteps || 0) - (a.todaySteps || 0))
     .slice(0, 5);
 
