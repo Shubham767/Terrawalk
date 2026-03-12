@@ -459,6 +459,8 @@ function updateProfileMenu() {
   document.getElementById('pmZoneName').textContent = state.user.zoneName || '';
   document.getElementById('pmWalkGoal').textContent = formatNum(state.user.walkGoal || 5000) + ' steps';
   document.getElementById('pmBio').textContent = state.user.bio || 'Tap to add your bio...';
+  const prev = document.getElementById('pmAvatarPreview');
+  if (prev) prev.textContent = getAvatarEmoji(state.user.avatar || 'Person');
 }
 
 // ===== EDIT NICKNAME =====
@@ -476,6 +478,44 @@ function openEditName() {
     showNotif('Nickname updated! ✏️');
   });
   setTimeout(() => document.getElementById('mmInput')?.focus(), 100);
+}
+
+// ===== CHANGE AVATAR =====
+function openChangeAvatar() {
+  closeProfileMenu();
+  const cur = state.user.avatar || 'Person';
+
+  // Build grid of all 27 emoji avatars
+  const grid = AVATAR_NAMES.map((name, i) => {
+    const emoji = AVATARS_EMOJI[i];
+    const isSel = name === cur;
+    return `<div class="avatar-change-option${isSel ? ' selected' : ''}"
+      onclick="selectAvatarChange('${name}', this)"
+      title="${name}">
+      <div style="font-size:26px;line-height:1.2">${emoji}</div>
+      <div style="font-size:8px;color:var(--text-dim);margin-top:2px;text-align:center">${name}</div>
+    </div>`;
+  }).join('');
+
+  showMiniModal('🐾 Change Avatar', `
+    <div class="avatar-change-grid">${grid}</div>
+  `, () => {
+    const sel = document.querySelector('.avatar-change-option.selected');
+    if (!sel) return;
+    const newAvatar = sel.dataset.avatarName;
+    state.user.avatar = newAvatar;
+    saveUserToFirebase();
+    updateHeaderUI();
+    // Redraw marker with new avatar immediately
+    if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
+    showNotif('Avatar updated! ' + getAvatarEmoji(newAvatar));
+  });
+}
+
+function selectAvatarChange(name, el) {
+  document.querySelectorAll('.avatar-change-option').forEach(a => a.classList.remove('selected'));
+  el.classList.add('selected');
+  el.dataset.avatarName = name;
 }
 
 // ===== EDIT BIO =====
@@ -854,14 +894,29 @@ function getAvatarSVG(avatarName) { return getAvatarEmoji(avatarName); }
   const s = document.createElement('style');
   s.id = 'tw-walk-keyframes';
   s.textContent = `
-    @keyframes twWalkLeg{0%,100%{transform:rotate(0deg)}25%{transform:rotate(25deg)}75%{transform:rotate(-25deg)}}
-    @keyframes twWalkArm{0%,100%{transform:rotate(0deg)}25%{transform:rotate(20deg)}75%{transform:rotate(-20deg)}}
-    @keyframes twBounce{0%,100%{transform:translateY(0px)}50%{transform:translateY(-4px)}}
-    .tw-walking-leg-l{transform-origin:50% 0%;animation:twWalkLeg 0.45s ease-in-out infinite !important;}
-    .tw-walking-leg-r{transform-origin:50% 0%;animation:twWalkLeg 0.45s ease-in-out infinite reverse !important;}
-    .tw-walking-arm-l{transform-origin:50% 0%;animation:twWalkArm 0.45s ease-in-out infinite reverse !important;}
-    .tw-walking-arm-r{transform-origin:50% 0%;animation:twWalkArm 0.45s ease-in-out infinite !important;}
-    .tw-walking-body{animation:twBounce 0.45s ease-in-out infinite !important;}
+    /* Full walking illusion for emoji avatar */
+    @keyframes twWalk {
+      0%   { transform: translateY(0px)   rotate(-4deg) scaleY(1);   }
+      15%  { transform: translateY(-5px)  rotate(0deg)  scaleY(1.04); }
+      30%  { transform: translateY(-2px)  rotate(4deg)  scaleY(1);   }
+      45%  { transform: translateY(0px)   rotate(0deg)  scaleY(0.97); }
+      50%  { transform: translateY(0px)   rotate(-4deg) scaleY(1);   }
+      65%  { transform: translateY(-5px)  rotate(0deg)  scaleY(1.04); }
+      80%  { transform: translateY(-2px)  rotate(4deg)  scaleY(1);   }
+      95%  { transform: translateY(0px)   rotate(0deg)  scaleY(0.97); }
+      100% { transform: translateY(0px)   rotate(-4deg) scaleY(1);   }
+    }
+    @keyframes twShadowPulse {
+      0%,100% { transform: scaleX(1);   opacity: 0.35; }
+      50%      { transform: scaleX(0.7); opacity: 0.15; }
+    }
+    @keyframes twWalkIdle {
+      0%,100% { transform: translateY(0px); }
+      50%      { transform: translateY(-1px); }
+    }
+    .tw-walking-body { animation: twWalk 0.5s ease-in-out infinite !important; transform-origin: bottom center; }
+    .tw-shadow-pulse  { animation: twShadowPulse 0.5s ease-in-out infinite !important; }
+    .tw-idle-body     { animation: twWalkIdle 2s ease-in-out infinite; transform-origin: bottom center; }
   `;
   document.head.appendChild(s);
 })();
@@ -879,36 +934,53 @@ function getZoomAvatarSize() {
 }
 
 function placeUserMarker(lat, lng) {
-  const name = state.user ? state.user.name : 'You';
-  const isWalking = state.walking;
-  const emoji = getAvatarEmoji(state.user ? state.user.avatar : 'Person');
-  const sz = getZoomAvatarSize();
-  const fontSize = Math.round(sz * 0.75);
+  const name      = state.user ? state.user.name : 'You';
+  const isWalking = state.walking || demoRunning;
+  const emoji     = getAvatarEmoji(state.user ? state.user.avatar : 'Person');
+  const sz        = getZoomAvatarSize();
+  const fontSize  = Math.round(sz * 0.82);
 
-  // Direction: flip emoji for westward movement
-  const facingLeft = currentHeading > 90 && currentHeading < 270;
-  const flipStyle = facingLeft ? 'transform:scaleX(-1);display:inline-block;' : 'display:inline-block;';
+  // Flip emoji direction based on heading
+  const facingLeft  = currentHeading > 90 && currentHeading < 270;
+  const flipX       = facingLeft ? 'scaleX(-1)' : 'scaleX(1)';
 
-  // Walking bounce animation on emoji
-  const bounceClass = isWalking ? 'tw-walking-body' : '';
-  // Walking: shift left/right leg illusion via slight rotation on the emoji
-  const walkShake = isWalking ? 'animation:twBounce 0.45s ease-in-out infinite;' : '';
+  // Walking: full stride animation + shadow pulse beneath feet
+  // Idle: gentle float
+  const avatarClass  = isWalking ? 'tw-walking-body' : 'tw-idle-body';
+  const shadowClass  = isWalking ? 'tw-shadow-pulse'  : '';
+  const shadowOpacity = isWalking ? 0.35 : 0.2;
+  const shadowW      = Math.round(sz * 0.7);
+  const shadowH      = Math.round(sz * 0.18);
 
-  // Only show name label at zoom >= 15
+  // Name label only at zoom >= 15
   const zoom = map ? map.getZoom() : 17;
   const nameLabel = zoom >= 15
-    ? `<div style="background:rgba(0,0,0,0.82);color:white;font-size:${Math.max(7, sz/5)}px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;max-width:${sz*2}px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color};margin-top:1px">${name}</div>`
+    ? `<div style="background:rgba(0,0,0,0.85);color:white;font-size:${Math.max(7,Math.round(sz/5))}px;font-weight:700;padding:1px 6px;border-radius:5px;white-space:nowrap;max-width:${sz*2}px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${state.user.color};margin-top:2px;letter-spacing:0.3px">${name}</div>`
+    : '';
+
+  // Speed indicator dots when walking
+  const speedDots = isWalking
+    ? `<div style="display:flex;gap:2px;margin-bottom:1px;opacity:0.7">
+        <div style="width:3px;height:3px;border-radius:50%;background:${state.user.color};animation:twWalkIdle 0.5s 0s infinite"></div>
+        <div style="width:3px;height:3px;border-radius:50%;background:${state.user.color};animation:twWalkIdle 0.5s 0.17s infinite"></div>
+        <div style="width:3px;height:3px;border-radius:50%;background:${state.user.color};animation:twWalkIdle 0.5s 0.33s infinite"></div>
+       </div>`
     : '';
 
   const icon = L.divIcon({
-    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 0 4px ${state.user.color})">
-      <div style="font-size:${fontSize}px;line-height:1;${walkShake}"><span style="${flipStyle}">${emoji}</span></div>
+    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 0 5px ${state.user.color})">
+      ${speedDots}
+      <div class="${avatarClass}" style="font-size:${fontSize}px;line-height:1;display:inline-block;transform-origin:bottom center">
+        <span style="display:inline-block;transform:${flipX}">${emoji}</span>
+      </div>
+      <div class="${shadowClass}" style="width:${shadowW}px;height:${shadowH}px;background:radial-gradient(ellipse,rgba(0,0,0,0.5) 0%,transparent 70%);border-radius:50%;margin-top:-2px;opacity:${shadowOpacity}"></div>
       ${nameLabel}
     </div>`,
-    iconSize: [sz * 1.4, sz + 20],
-    iconAnchor: [sz * 0.7, sz + 18],
-    className: ''
+    iconSize:   [sz * 1.6, sz + 28],
+    iconAnchor: [sz * 0.8, sz + 20],
+    className:  ''
   });
+
   if (userMarker) map.removeLayer(userMarker);
   userMarker = L.marker([lat, lng], { icon }).addTo(map);
 }
