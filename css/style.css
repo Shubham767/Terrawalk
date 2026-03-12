@@ -1031,3 +1031,87 @@ input[type="text"]:focus { border-color: var(--accent); }
   0%,100% { box-shadow: 0 4px 20px rgba(255,75,110,0.5), 0 0 0 3px rgba(255,75,110,0.2); }
   50%      { box-shadow: 0 4px 28px rgba(255,75,110,0.7), 0 0 0 7px rgba(255,75,110,0.08); }
 }
+
+/* ===== WALKERS ONLINE BAR ===== */
+.walkers-online-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,229,160,0.07);
+  border: 1px solid rgba(0,229,160,0.2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 6px 0 4px;
+}
+.walkers-online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: onlinePulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes onlinePulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ===== TOP WALKERS TODAY LIST ===== */
+.top-today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+.top-today-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.top-today-rank {
+  font-size: 11px;
+  font-weight: 800;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.top-today-avatar {
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.top-today-info {
+  flex: 1;
+  min-width: 0;
+}
+.top-today-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top-today-steps {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.top-today-dist {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
