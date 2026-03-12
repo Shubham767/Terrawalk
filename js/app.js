@@ -665,6 +665,73 @@ function saveMiniModal() {
   closeMiniModal();
 }
 
+// ===== SHARE / INVITE =====
+function shareApp() {
+  closeProfileMenu();
+  const url   = 'https://terrawalk.vercel.app';
+  const title = 'TerraWalk — Claim the streets!';
+  const text  = `I'm playing TerraWalk — walk around your city to claim territory and battle rivals for turf. Join me! 🗺️⚔️`;
+
+  // Use native share sheet on mobile (works on Android/iOS)
+  if (navigator.share) {
+    navigator.share({ title, text, url })
+      .then(() => showNotif('Thanks for sharing! 🙌'))
+      .catch(() => {});
+    return;
+  }
+
+  // Fallback — copy link + show options modal
+  navigator.clipboard.writeText(url).then(() => {
+    showShareModal(url, text);
+  }).catch(() => {
+    showShareModal(url, text);
+  });
+}
+
+function showShareModal(url, text) {
+  const encoded = encodeURIComponent(text + ' ' + url);
+  const waLink  = `https://wa.me/?text=${encoded}`;
+  const tgLink  = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  const twLink  = `https://twitter.com/intent/tweet?text=${encoded}`;
+
+  const existing = document.getElementById('miniModalOverlay');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.className = 'mini-modal-overlay';
+  el.id = 'miniModalOverlay';
+  el.innerHTML = `
+    <div class="mini-modal">
+      <h3>🔗 Invite Friends</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+        <a href="${waLink}" target="_blank" class="share-btn share-wa" onclick="closeMiniModal()">
+          <span>💬</span> Share on WhatsApp
+        </a>
+        <a href="${tgLink}" target="_blank" class="share-btn share-tg" onclick="closeMiniModal()">
+          <span>✈️</span> Share on Telegram
+        </a>
+        <a href="${twLink}" target="_blank" class="share-btn share-tw" onclick="closeMiniModal()">
+          <span>🐦</span> Share on Twitter / X
+        </a>
+        <div class="share-link-row">
+          <span class="share-link-text">${url}</span>
+          <button class="share-copy-btn" onclick="copyShareLink('${url}', this)">Copy</button>
+        </div>
+      </div>
+      <button class="btn-cancel" style="width:100%" onclick="closeMiniModal()">Done</button>
+    </div>`;
+  el.addEventListener('click', e => { if (e.target === el) closeMiniModal(); });
+  document.body.appendChild(el);
+}
+
+function copyShareLink(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    btn.textContent = 'Copied!';
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#000';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; btn.style.color = ''; }, 2000);
+  });
+}
+
 // ===== LOGOUT =====
 function logout() {
   localStorage.removeItem('tw_uid');
@@ -696,134 +763,6 @@ function loadSavedProfile() {
   return false;
 }
 
-// ===== DEV TOOLS =====
-function devResetProgress() {
-  if (!confirm('Reset ALL your progress? This cannot be undone.')) return;
-  if (!state.userId || !db) return;
-  db.ref('users/' + state.userId).remove();
-  db.ref('territories/' + state.userId).remove();
-  db.ref('territory_snapshot/' + state.userId).remove();
-  localStorage.removeItem('tw_uid');
-  localStorage.removeItem('tw_phone');
-  showNotif('Progress reset! Reloading...');
-  setTimeout(() => window.location.reload(), 1500);
-}
-
-function devSpawnRivals() {
-  if (!map) { showNotif('Map not ready'); return; }
-  if (!state.currentLat) {
-    state.currentLat = map.getCenter().lat;
-    state.currentLng = map.getCenter().lng;
-  }
-  const rivals = [
-    { name: 'Arjun', color: '#ff4b6e' },
-    { name: 'Priya', color: '#a855f7' },
-    { name: 'Karan', color: '#ffd700' },
-    { name: 'Rahul', color: '#00d4ff' },
-  ];
-  rivals.forEach((r, i) => {
-    const offLat = (Math.random() - 0.5) * 0.002;
-    const offLng = (Math.random() - 0.5) * 0.002;
-    const cLat = state.currentLat + offLat;
-    const cLng = state.currentLng + offLng;
-    const path = generatePolygon(cLat, cLng, 0.0006, 8);
-    if (!territoryStore['dev_' + i]) {
-      territoryStore['dev_' + i] = { uid: 'dev_' + i, name: r.name, color: r.color, geojson: null, layer: null, steps: Math.floor(Math.random()*5000) };
-    }
-    try {
-      const gj = pathToGeoJSON(path);
-      territoryStore['dev_' + i].geojson = gj;
-      redrawTerritory('dev_' + i);
-    } catch(e) {}
-  });
-  showNotif('4 rivals spawned nearby 👥');
-}
-
-function devDemoWalk() {
-  if (!state.user) { showNotif('Login first'); return; }
-  if (!map)        { showNotif('Map not ready'); return; }
-
-  if (demoRunning) {
-    demoRunning = false;
-    clearInterval(demoInterval);
-    demoInterval = null;
-    state.walking = false;
-    if (state.walkPath.length > 2) { closeTerritory(); }
-    state.walkPath = [];
-    if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
-    document.getElementById('walkBtn').textContent = '▶ START WALK';
-    document.getElementById('walkBtn').classList.remove('active');
-    document.getElementById('walkingHud').classList.remove('visible');
-    document.getElementById('statusBadge').textContent = '🟢 READY';
-    document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
-    if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng);
-    showNotif('Demo stopped');
-    return;
-  }
-
-  const cLat = state.currentLat || map.getCenter().lat;
-  const cLng = state.currentLng || map.getCenter().lng;
-
-  state.walking = true;
-  state.walkPath = [];
-  state.sessionGain = 0;
-  state.sessionDist = 0;
-  state.sessionSteps = 0;
-  if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
-  document.getElementById('walkBtn').textContent = '⏹ STOP WALK';
-  document.getElementById('walkBtn').classList.add('active');
-  document.getElementById('walkingHud').classList.add('visible');
-  document.getElementById('statusBadge').textContent = '🔴 WALKING';
-
-  demoRunning = true;
-  document.getElementById('devDemoBtn').textContent = '⏹ Stop Demo';
-  showNotif('🎮 Demo walk started!');
-
-  const R = 0.0007;
-  const TOTAL = 80;
-  let step = 0;
-
-  state.currentLat = cLat + R;
-  state.currentLng = cLng;
-  placeUserMarker(state.currentLat, state.currentLng);
-  map.setView([state.currentLat, state.currentLng], 17);
-
-  demoInterval = setInterval(() => {
-    if (!demoRunning) return;
-    step++;
-    const t = (step / TOTAL) * 2 * Math.PI;
-    const lat = cLat + R * Math.cos(t);
-    const lng = cLng + R * Math.sin(t);
-    const dLat = lat - state.currentLat;
-    const dLng = lng - state.currentLng;
-    currentHeading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
-    state.currentLat = lat;
-    state.currentLng = lng;
-    addWalkPoint(lat, lng);
-    placeUserMarker(lat, lng);
-    map.panTo([lat, lng]);
-    state.steps += 10; state.todaySteps += 10; state.sessionSteps += 10;
-    state.distance += 0.005; state.todayDistance += 0.005; state.sessionDist += 0.005;
-    updateStats();
-    if (step >= TOTAL) {
-      demoRunning = false;
-      clearInterval(demoInterval);
-      demoInterval = null;
-      document.getElementById('devDemoBtn').textContent = '🚶 Demo Walk';
-      state.walking = false;
-      if (state.walkPath.length > 2) { closeTerritory(); }
-      state.walkPath = [];
-      if (currentPolyline) { map.removeLayer(currentPolyline); currentPolyline = null; }
-      document.getElementById('walkBtn').textContent = '▶ START WALK';
-      document.getElementById('walkBtn').classList.remove('active');
-      document.getElementById('walkingHud').classList.remove('visible');
-      document.getElementById('statusBadge').textContent = '🟢 READY';
-      placeUserMarker(state.currentLat, state.currentLng);
-      showNotif('Demo complete! Territory claimed 🎉');
-      saveUserToFirebase();
-    }
-  }, 130);
-}
 
 function persistState() {
   // State is persisted to Firebase via saveUserToFirebase()
