@@ -177,8 +177,11 @@ function loadUserFromFirebase(uid) {
 
       // Init map first, then restore territory polygons
       initMap(/* onReady */ () => {
-        restoreTerritoryFromFirebase(uid);
-        listenToOtherUsers();
+        restoreTerritoryFromFirebase(uid, () => {
+          // After own territory loads, start listening to rivals
+          // reconcileRivalOverlaps() will run once rivals are also loaded
+          listenToOtherUsers();
+        });
         listenForNotifications();
         renderLeaderboards();
         startDecay();
@@ -198,10 +201,9 @@ function loadUserFromFirebase(uid) {
 }
 
 // ===== RESTORE TERRITORY FROM FIREBASE =====
-function restoreTerritoryFromFirebase(uid) {
-  if (!db) return;
+function restoreTerritoryFromFirebase(uid, onDone) {
+  if (!db) { if (onDone) onDone(); return; }
 
-  // First try fast snapshot restore
   db.ref('territory_snapshot/' + uid).once('value').then(snap => {
     const data = snap.val();
     if (data && data.geojson) {
@@ -213,14 +215,15 @@ function restoreTerritoryFromFirebase(uid) {
         territoryStore[uid].geojson = geojson;
         redrawTerritory(uid);
         showNotif('Your territory is back! 🟢');
+        if (onDone) onDone();
         return;
       } catch(e) { console.warn('Snapshot parse error:', e); }
     }
 
-    // Fallback: rebuild from individual polygons
+    // Fallback: rebuild from individual walk polygons
     db.ref('territories/' + uid).once('value').then(snap2 => {
       const polys = snap2.val();
-      if (!polys) return;
+      if (!polys) { if (onDone) onDone(); return; }
       if (!territoryStore[uid]) {
         territoryStore[uid] = { uid, name: state.user.name, color: state.user.color, geojson: null, layer: null };
       }
@@ -238,6 +241,7 @@ function restoreTerritoryFromFirebase(uid) {
       });
       redrawTerritory(uid);
       showNotif('Your territory is back! 🟢');
+      if (onDone) onDone();
     });
   });
 }
@@ -296,6 +300,42 @@ function saveMergedTerritoryToFirebase() {
   });
 }
 
+
+// ===== RECONCILE: subtract our territory from a rival's polygon on load =====
+// This corrects stale Firebase snapshots where overlap was never cleaned up
+function reconcileRivalOverlap(rivalUid) {
+  const myEntry = territoryStore[state.userId];
+  const rivalEntry = territoryStore[rivalUid];
+  if (!myEntry || !myEntry.geojson || !rivalEntry || !rivalEntry.geojson) return;
+
+  try {
+    const intersection = turf.intersect(myEntry.geojson, rivalEntry.geojson);
+    if (!intersection) return; // no overlap — nothing to fix
+
+    const overlapM2 = Math.floor(turf.area(intersection));
+    if (overlapM2 < 10) return; // trivial overlap, skip
+
+    console.log(`Reconciling ${overlapM2}m² overlap with ${rivalEntry.name} — correcting Firebase...`);
+
+    const remaining = turf.difference(rivalEntry.geojson, myEntry.geojson);
+    rivalEntry.geojson = remaining || null;
+
+    // Write the corrected polygon back to Firebase so everyone sees it
+    if (db) {
+      if (rivalEntry.geojson) {
+        db.ref(`territory_snapshot/${rivalUid}`).update({
+          geojson: JSON.stringify(rivalEntry.geojson),
+          updatedAt: Date.now()
+        });
+      } else {
+        db.ref(`territory_snapshot/${rivalUid}`).remove();
+      }
+    }
+    // Mark as locally handled so the Firebase listener doesn't restore the old version
+    if (window._twLocalCaptures) window._twLocalCaptures.add(rivalUid);
+  } catch(e) { console.warn('Reconcile overlap error:', e); }
+}
+
 // ===== FIREBASE: LISTEN TO OTHER USERS =====
 function listenToOtherUsers() {
   if (!db) return;
@@ -321,8 +361,9 @@ function listenToOtherUsers() {
           const rivalSteps = userStepsMap[uid] || 0;
 
           if (!territoryStore[uid]) {
-            // First time seeing this rival — load full polygon
+            // First time seeing this rival — load and immediately reconcile vs our territory
             territoryStore[uid] = { uid, name: data.name, color: data.color, geojson, layer: null, steps: rivalSteps };
+            reconcileRivalOverlap(uid); // subtract any of our territory that overlaps theirs
             redrawTerritory(uid);
           } else if (!locallyCapture.has(uid)) {
             // Not captured this session — safe to update from Firebase
@@ -1239,7 +1280,7 @@ function closeTerritory() {
       // Subtract captured area from rival — null means fully consumed
       const remaining = turf.difference(rival.geojson, newGeoJSON);
       rival.geojson = remaining || null;
-      redrawTerritory(rivalUid); // redraw rival with reduced territory
+      redrawTerritory(rivalUid);
 
       capturedThisWalk     += capturedM2;
       state.territory      += capturedM2;
@@ -1249,8 +1290,22 @@ function closeTerritory() {
       state.todayCaptures++;
       showNotif(`⚔️ Captured ${capturedM2} m² from ${rival.name}!`);
       notifyRivalCapture(rivalUid, state.user.name, capturedM2);
-      // Prevent Firebase listener from restoring their full polygon this session
+      // Prevent Firebase listener from overwriting our reduction this session
       if (window._twLocalCaptures) window._twLocalCaptures.add(rivalUid);
+
+      // PERSIST THE CAPTURE: write rival's reduced polygon back to Firebase
+      // This makes the capture survive page refreshes for ALL users
+      if (db) {
+        if (rival.geojson) {
+          db.ref(`territory_snapshot/${rivalUid}`).update({
+            geojson: JSON.stringify(rival.geojson),
+            updatedAt: Date.now()
+          });
+        } else {
+          // Rival fully consumed — remove their snapshot entirely
+          db.ref(`territory_snapshot/${rivalUid}`).remove();
+        }
+      }
     } catch(e) { console.warn('Capture error:', e); }
   });
 
@@ -1290,9 +1345,8 @@ function closeTerritory() {
   flash.classList.add('flash');
   setTimeout(() => flash.classList.remove('flash'), 300);
 
-  safe('hudTerritory', `+${state.sessionGain} m²`);
-  safe('hudSteps',     state.sessionSteps.toLocaleString());
-  safe('hudDist',      state.sessionDist.toFixed(2) + ' km');
+  safe('hudSteps', state.sessionSteps.toLocaleString());
+  safe('hudDist',  formatSessionDist(state.sessionDist));
   updateStats();
 
   // Show a brief "+Xm² claimed" floating tag at the user's current position
@@ -1354,6 +1408,12 @@ function startDecay() {
   }, 10000);
 }
 
+
+// Format session distance: show metres when < 1km, km when >= 1km
+function formatSessionDist(km) {
+  if (km < 1) return Math.round(km * 1000) + ' m';
+  return km.toFixed(2) + ' km';
+}
 // ===== STATS =====
 function updateStats() {
   // Auto-reset today stats if it's a new day
@@ -1380,9 +1440,8 @@ function updateStats() {
   safe('statTodayCaptures', state.todayCaptures);
 
   // HUD
-  safe('hudDist',      state.sessionDist.toFixed(2) + ' km');
-  safe('hudSteps',     state.sessionSteps.toLocaleString());
-  safe('hudTerritory', '+' + state.sessionGain + ' m²');
+  safe('hudSteps', state.sessionSteps.toLocaleString());
+  safe('hudDist',  formatSessionDist(state.sessionDist));
 
   // Only redraw polygon label when NOT walking (avoid per-ping redraws)
   // Label is refreshed on closeTerritory() and stopWalk() instead
