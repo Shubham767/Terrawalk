@@ -394,6 +394,8 @@ function listenToOtherUsers() {
       }
     });
     renderFirebaseLeaderboard(users);
+    updateWalkersOnline(users);
+    renderTopTodayList(users);
   });
 }
 function renderFirebaseLeaderboard(users) {
@@ -402,6 +404,54 @@ function renderFirebaseLeaderboard(users) {
   renderLbList('localLb', cityUsers.map(u => ({ ...u, me: u.uid === state.userId })));
   renderLbList('globalLb', users.map(u => ({ ...u, me: u.uid === state.userId })));
 }
+// ===== WALKERS ONLINE TODAY =====
+function updateWalkersOnline(users) {
+  const todayStr = new Date().toDateString();
+  const midnight = new Date(); midnight.setHours(0,0,0,0);
+  const midnightMs = midnight.getTime();
+
+  // Count users whose updatedAt is after midnight today
+  const onlineCount = users.filter(u => (u.updatedAt || 0) >= midnightMs).length;
+  const el = document.getElementById('walkersOnlineCount');
+  if (el) el.textContent = onlineCount;
+}
+
+// ===== TOP 5 WALKERS TODAY =====
+function renderTopTodayList(users) {
+  const el = document.getElementById('topTodayList');
+  if (!el) return;
+
+  // Sort by todaySteps descending, take top 5
+  const todayStr = new Date().toDateString();
+  const ranked = users
+    .filter(u => u.todayDate === todayStr && (u.todaySteps || 0) > 0)
+    .sort((a, b) => (b.todaySteps || 0) - (a.todaySteps || 0))
+    .slice(0, 5);
+
+  if (!ranked.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px 0">No walks recorded yet today</div>';
+    return;
+  }
+
+  const medals = ['🥇','🥈','🥉','4','5'];
+  el.innerHTML = ranked.map((u, i) => {
+    const isMe = u.uid === state.userId;
+    const emoji = getAvatarEmoji(u.avatar || 'Person');
+    const steps = formatNum(u.todaySteps || 0);
+    const dist  = (u.todayDistance || 0).toFixed(1);
+    return `<div class="top-today-item${isMe ? '" style="border-color:' + (u.color||'var(--accent)') + ';background:' + (u.color||'var(--accent)') + '11' : ''}">
+      <div class="top-today-rank">${medals[i]}</div>
+      <div class="top-today-avatar" style="background:${u.color||'#333'}33">${emoji}</div>
+      <div class="top-today-info">
+        <div class="top-today-name">${u.name}${isMe ? ' (You)' : ''}</div>
+        <div class="top-today-steps">${steps} steps</div>
+      </div>
+      <div class="top-today-dist">${dist} km</div>
+    </div>`;
+  }).join('');
+}
+
+
 
 // ===== PROFILE SETUP =====
 function buildProfileModal() {
@@ -1431,13 +1481,11 @@ function updateStats() {
   safe('statTerritory', formatNum(state.territory));
   safe('statSteps', formatNum(state.steps));
   safe('statDist', state.distance.toFixed(1));
-  safe('statCaptures', state.captures);
 
   // Today
   safe('statTodayTerritory', formatNum(state.todayTerritory));
   safe('statTodaySteps', formatNum(state.todaySteps));
   safe('statTodayDist', state.todayDistance.toFixed(1));
-  safe('statTodayCaptures', state.todayCaptures);
 
   // HUD
   safe('hudSteps', state.sessionSteps.toLocaleString());
