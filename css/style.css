@@ -981,3 +981,32 @@ input[type="text"]:focus { border-color: var(--accent); }
   font-family: var(--font-body);
   transition: background 0.2s, color 0.2s;
 }
+
+/* ===== FLOATING STOP WALK BUTTON ===== */
+.stop-walk-fab {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  background: #ff4b6e;
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  font-family: var(--font-body);
+  padding: 12px 28px;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(255,75,110,0.5), 0 0 0 3px rgba(255,75,110,0.2);
+  letter-spacing: 0.5px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+  animation: fabPulse 1.8s ease-in-out infinite;
+  white-space: nowrap;
+}
+.stop-walk-fab:active { transform: translateX(-50%) scale(0.96); }
+@keyframes fabPulse {
+  0%,100% { box-shadow: 0 4px 20px rgba(255,75,110,0.5), 0 0 0 3px rgba(255,75,110,0.2); }
+  50%      { box-shadow: 0 4px 28px rgba(255,75,110,0.7), 0 0 0 7px rgba(255,75,110,0.08); }
+}
