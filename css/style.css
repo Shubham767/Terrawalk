@@ -903,15 +903,7 @@ input[type="text"]:focus { border-color: var(--accent); }
 }
 .notif-prompt-dismiss:hover { color: var(--text); }
 
-/* ===== DEV TOOLS ===== */
-.dev-tools {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  display: flex;
-  gap: 6px;
-  z-index: 900;
-}
+
 
 /* ===== AVATAR CHANGE GRID ===== */
 .avatar-change-grid {
@@ -939,4 +931,53 @@ input[type="text"]:focus { border-color: var(--accent); }
 .avatar-change-option.selected {
   border-color: var(--accent);
   background: rgba(0,229,160,0.1);
+}
+
+/* ===== SHARE MODAL ===== */
+.share-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  color: white;
+  transition: opacity 0.15s;
+  font-family: var(--font-body);
+}
+.share-btn:hover { opacity: 0.88; }
+.share-wa { background: #25D366; }
+.share-tg { background: #2AABEE; }
+.share-tw { background: #1DA1F2; }
+.share-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.share-link-text {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-copy-btn {
+  background: var(--surface3, #333);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  transition: background 0.2s, color 0.2s;
 }
