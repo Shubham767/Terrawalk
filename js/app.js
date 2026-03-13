@@ -421,9 +421,19 @@ function renderFirebaseLeaderboard(users) {
 }
 // ===== WALKERS ONLINE TODAY =====
 function updateWalkersOnline(users) {
-  // Show total registered users — gives a healthy number from day one
+  if (!db) return;
   const el = document.getElementById('walkersOnlineCount');
-  if (el) el.textContent = users.length;
+  if (!el) return;
+
+  // Count ALL nodes under users/ — covers both ph_XXXX and user_XXXX key formats
+  // Uses a fresh shallow query so count is always accurate regardless of
+  // what subset was passed in via the leaderboard query
+  db.ref('users').once('value', snap => {
+    let count = 0;
+    snap.forEach(() => count++);
+    // Show actual count — always at least 1 (the current user is registered)
+    el.textContent = Math.max(1, count);
+  });
 }
 
 // ===== DUMMY WALKERS (shown only when no real walkers today) =====
