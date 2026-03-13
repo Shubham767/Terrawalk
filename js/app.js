@@ -396,13 +396,21 @@ function listenToOtherUsers() {
     renderFirebaseLeaderboard(users);
   });
 
-  // Separate query for today's walkers — uses todaySteps index, no limitToLast cap
-  // Fetches ALL users who have walked today (todaySteps > 0), not just top-20 territory holders
-  db.ref('users').orderByChild('todaySteps').startAt(1).on('value', snapshot => {
-    const todayWalkers = [];
-    snapshot.forEach(child => todayWalkers.push({ uid: child.key, ...child.val() }));
-    updateWalkersOnline(todayWalkers);
-    renderTopTodayList(todayWalkers);
+  // Fetch ALL registered users for walker count + today top list
+  db.ref('users').once('value', snapshot => {
+    const allUsers = [];
+    snapshot.forEach(child => allUsers.push({ uid: child.key, ...child.val() }));
+    updateWalkersOnline(allUsers);
+    renderTopTodayList(allUsers);
+  });
+  // Re-fetch on user save so top list stays live
+  db.ref('users').on('child_changed', () => {
+    db.ref('users').once('value', snapshot => {
+      const allUsers = [];
+      snapshot.forEach(child => allUsers.push({ uid: child.key, ...child.val() }));
+      updateWalkersOnline(allUsers);
+      renderTopTodayList(allUsers);
+    });
   });
 }
 function renderFirebaseLeaderboard(users) {
@@ -413,11 +421,78 @@ function renderFirebaseLeaderboard(users) {
 }
 // ===== WALKERS ONLINE TODAY =====
 function updateWalkersOnline(users) {
-  // Count users who have walked today — todaySteps > 0 is the reliable signal
-  // (already filtered by the query, but double-check here for safety)
-  const onlineCount = users.filter(u => (u.todaySteps || 0) > 0).length;
+  // Show total registered users — gives a healthy number from day one
   const el = document.getElementById('walkersOnlineCount');
-  if (el) el.textContent = onlineCount;
+  if (el) el.textContent = users.length;
+}
+
+// ===== DUMMY WALKERS (shown only when no real walkers today) =====
+const DUMMY_WALKERS = [
+  { uid: 'dummy_1', name: 'Arjun Mehta',   avatar: 'Eagle',   color: '#ff4b6e', city: 'Mumbai',    todaySteps: 6842, todayDistance: 5.1 },
+  { uid: 'dummy_2', name: 'Priya Sharma',  avatar: 'Butterfly',color: '#a855f7', city: 'Delhi',     todaySteps: 4310, todayDistance: 3.3 },
+  { uid: 'dummy_3', name: 'Karan Nair',    avatar: 'Dolphin', color: '#4b9fff', city: 'Bangalore', todaySteps: 3190, todayDistance: 2.5 },
+];
+
+// Generate a realistic random polygon around a centre lat/lng
+// Creates a roughly circular walk path with natural-looking variation
+function makeDummyPolygon(centerLat, centerLng, radiusMetres, uid) {
+  if (!window.turf) return;
+  if (territoryStore[uid] && territoryStore[uid].geojson) return; // already drawn
+
+  const pts = 10 + Math.floor(Math.random() * 6); // 10–15 sides
+  const coords = [];
+  const R = 6371000;
+  for (let i = 0; i < pts; i++) {
+    const angle = (i / pts) * 2 * Math.PI;
+    // Vary radius 60–130% for organic shape
+    const r = radiusMetres * (0.6 + Math.random() * 0.7);
+    const dLat = (r * Math.cos(angle)) / R * (180 / Math.PI);
+    const dLng = (r * Math.sin(angle)) / (R * Math.cos(centerLat * Math.PI / 180)) * (180 / Math.PI);
+    coords.push([centerLng + dLng, centerLat + dLat]); // GeoJSON = [lng, lat]
+  }
+  coords.push(coords[0]); // close ring
+
+  try {
+    const geojson = turf.polygon([coords]);
+    const d = DUMMY_WALKERS.find(d => d.uid === uid);
+    if (!d) return;
+    territoryStore[uid] = {
+      uid,
+      name: d.name,
+      color: d.color,
+      geojson,
+      layer: null,
+      steps: d.todaySteps,
+      zoneName: ''
+    };
+    redrawTerritory(uid);
+  } catch(e) { console.warn('Dummy polygon error:', e); }
+}
+
+function spawnDummyPolygons() {
+  if (!state.currentLat) return;
+  // Place each dummy nearby but offset so they don't overlap yours
+  const offsets = [
+    [0.003,  0.004],   // ~350m NE
+    [-0.004, 0.005],   // ~450m NW
+    [0.005, -0.003],   // ~400m SE
+  ];
+  DUMMY_WALKERS.forEach((d, i) => {
+    const lat = state.currentLat  + offsets[i][0];
+    const lng = state.currentLng + offsets[i][1];
+    // Radius scales with their steps: ~100–200m
+    const radius = 80 + (d.todaySteps / 6842) * 120;
+    makeDummyPolygon(lat, lng, radius, d.uid);
+  });
+}
+
+function removeDummyPolygons() {
+  DUMMY_WALKERS.forEach(d => {
+    if (territoryStore[d.uid]) {
+      if (territoryStore[d.uid].layer) map.removeLayer(territoryStore[d.uid].layer);
+      delete territoryStore[d.uid];
+    }
+  });
 }
 
 // ===== TOP 5 WALKERS TODAY =====
@@ -425,18 +500,32 @@ function renderTopTodayList(users) {
   const el = document.getElementById('topTodayList');
   if (!el) return;
 
-  // Sort by todaySteps descending, take top 5
-  // No date string comparison — query already filtered to todaySteps > 0
   const ranked = users
     .filter(u => (u.todaySteps || 0) > 0)
     .sort((a, b) => (b.todaySteps || 0) - (a.todaySteps || 0))
     .slice(0, 5);
 
   if (!ranked.length) {
-    el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px 0">No walks recorded yet today</div>';
+    // No real walkers today — show dummies
+    spawnDummyPolygons();
+    const medals = ['🥇','🥈','🥉'];
+    el.innerHTML = DUMMY_WALKERS.map((u, i) => {
+      const emoji = getAvatarEmoji(u.avatar);
+      return `<div class="top-today-item">
+        <div class="top-today-rank">${medals[i]}</div>
+        <div class="top-today-avatar" style="background:${u.color}33">${emoji}</div>
+        <div class="top-today-info">
+          <div class="top-today-name">${u.name}</div>
+          <div class="top-today-steps">${formatNum(u.todaySteps)} steps</div>
+        </div>
+        <div class="top-today-dist">${u.todayDistance.toFixed(1)} km</div>
+      </div>`;
+    }).join('');
     return;
   }
 
+  // Real walkers exist — remove any dummy polygons and show real data
+  removeDummyPolygons();
   const medals = ['🥇','🥈','🥉','4','5'];
   el.innerHTML = ranked.map((u, i) => {
     const isMe = u.uid === state.userId;
@@ -454,6 +543,8 @@ function renderTopTodayList(users) {
     </div>`;
   }).join('');
 }
+
+
 
 
 
@@ -880,6 +971,8 @@ function initMap(onReady) {
       updateGpsStatus('locked', 'GPS Locked ✓');
       showNotif('📍 GPS locked! Walk to claim territory 🚶');
       if (onReady) onReady();
+      // Spawn dummy polygons once GPS is known — placed relative to real location
+      setTimeout(spawnDummyPolygons, 2000);
     },
     err => {
       // GPS failed or denied — show a permission-friendly message
