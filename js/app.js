@@ -860,6 +860,15 @@ function initMap(onReady) {
 
   updateGpsStatus('searching', 'Searching for GPS signal...');
 
+  // Always attach the zoomend handler immediately
+  map.on('zoomend', () => { if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng); });
+
+  // Start GPS watcher immediately — don't wait for getCurrentPosition
+  // This ensures tracking always starts even if initial fix is slow
+  startAutoWalkGPS();
+
+  // Get initial position — maximumAge:0 forces a FRESH fix, never a stale cached one
+  // This prevents the "Delhi default" bug where browser returns old cached coords
   navigator.geolocation.getCurrentPosition(
     pos => {
       const { latitude: lat, longitude: lng } = pos.coords;
@@ -868,26 +877,19 @@ function initMap(onReady) {
       state.gpsLocked = true;
       map.setView([lat, lng], 17);
       placeUserMarker(lat, lng);
-      updateGpsStatus('locked', 'GPS Locked — auto-walk ON ✓');
-      startAutoWalkGPS(); // auto-detect walking from now on
-      // Resize avatar on zoom
-      map.on('zoomend', () => { if (state.currentLat) placeUserMarker(state.currentLat, state.currentLng); });
-      showNotif('📍 GPS ready! Walk and territory claims automatically 🚶');
+      updateGpsStatus('locked', 'GPS Locked ✓');
+      showNotif('📍 GPS locked! Walk to claim territory 🚶');
       if (onReady) onReady();
     },
-    () => {
-      // Fallback: Delhi
-      const lat = 28.6139, lng = 77.2090;
-      state.currentLat = lat;
-      state.currentLng = lng;
-      map.setView([lat, lng], 16);
-      placeUserMarker(lat, lng);
-      updateGpsStatus('searching', 'GPS unavailable — using Delhi');
-      document.getElementById('walkBtn').style.display = 'block'; // manual only without GPS
-      showNotif('📍 Enable location for real GPS tracking');
-      if (onReady) onReady();
+    err => {
+      // GPS failed or denied — show a permission-friendly message
+      // Do NOT fall back to Delhi. Show India-level zoom and ask for permission.
+      updateGpsStatus('searching', 'Allow location access for GPS tracking');
+      map.setView([20.5937, 78.9629], 5); // India overview — no fake position
+      showNotif('📍 Please allow location access so we can track your walk');
+      if (onReady) onReady(); // still init the app so UI loads
     },
-    { enableHighAccuracy: true, timeout: 10000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } // maximumAge:0 = always fresh
   );
 }
 
@@ -1075,10 +1077,12 @@ function startAutoWalkGPS() {
         return;
       }
 
-      // Require BOTH speed threshold AND distance to avoid GPS noise triggering steps
-      // GPS noise on a stationary phone = 1–4m per ping, so we use 5m min + speed confirmation
+      // Walking = speed reported by GPS AND meaningful distance covered
+      // Removed the (distMoved >= 5.0) fallback — GPS drift on a parked phone
+      // easily moves 3–8m between pings, causing phantom steps and false walks.
+      // We require speed confirmation to avoid counting noise as movement.
       const isWalkingNow = (speed >= WALK_SPEED_MIN && distMoved >= 1.5)
-                        || (distMoved >= 5.0); // unambiguous movement even if speed not reported
+                        || (speed >= 0.5 && distMoved >= 2.0); // secondary: slightly higher both thresholds
 
       if (isWalkingNow) {
         // Moving — clear still timer
@@ -1110,7 +1114,7 @@ function startAutoWalkGPS() {
       }
     },
     err => console.warn('GPS error:', err),
-    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
   );
 }
 
@@ -1188,8 +1192,9 @@ function stopWalk() {
 
 function estimateSteps(distMetres) {
   if (!distMetres || distMetres <= 0) return 0;
-  // Average stride = ~0.75m, so steps = distance / 0.75
-  return Math.max(1, Math.floor(distMetres / 0.75));
+  // Average stride = ~0.80m (adult walking pace)
+  // Previous 0.75m stride was too short — gave ~7% too many steps per km
+  return Math.max(1, Math.floor(distMetres / 0.80));
 }
 
 function addWalkPoint(lat, lng) {
