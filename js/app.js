@@ -516,14 +516,20 @@ function renderTopTodayList(users) {
   const el = document.getElementById('topTodayList');
   if (!el) return;
 
-  const ranked = users
+  // Real walkers who have walked today (exclude self — they see themselves separately)
+  const realRanked = users
     .filter(u => (u.todaySteps || 0) > 0)
     .sort((a, b) => (b.todaySteps || 0) - (a.todaySteps || 0))
     .slice(0, 5);
 
-  if (!ranked.length) {
-    spawnDummyPolygons();
-    const medals = ['🥇','🥈','🥉','4️⃣'];
+  // Dummies ALWAYS spawn — they are area-based competitors, not a fallback.
+  // spawnDummyPolygons() is a no-op if the cell hasn't changed, so safe to call here.
+  spawnDummyPolygons();
+
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+
+  if (!realRanked.length) {
+    // No real walkers today — show only dummies in the leaderboard list
     el.innerHTML = DUMMY_WALKERS.map((u, i) => {
       const emoji = getAvatarEmoji(u.avatar);
       return `<div class="top-today-item">
@@ -539,9 +545,8 @@ function renderTopTodayList(users) {
     return;
   }
 
-  removeDummyPolygons();
-  const medals = ['🥇','🥈','🥉','4','5'];
-  el.innerHTML = ranked.map((u, i) => {
+  // Real walkers exist — show them in the list; dummies still show on the MAP
+  el.innerHTML = realRanked.map((u, i) => {
     const isMe = u.uid === state.userId;
     const emoji = getAvatarEmoji(u.avatar || 'Person');
     const steps = formatNum(u.todaySteps || 0);
@@ -1207,20 +1212,31 @@ function redrawTerritory(uid) {
   const stepsCount = isMe ? state.steps : (entry.steps || 0);
   const textColor = entry.color;
 
-  const labelMarkers = paths.map(path => {
-    const center = L.polygon(path).getBounds().getCenter();
-    const labelIcon = L.divIcon({
-      html: `<div style="pointer-events:none;text-align:center;line-height:1.6;white-space:nowrap;transform:translate(-50%, -50%);text-shadow: 0 0 8px ${entry.color}, 0 0 2px rgba(0,0,0,0.9);">
-          <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}${entry.zoneName ? ' · <span style=\'font-size:9px;font-weight:500\'>' + entry.zoneName + '</span>' : ''}</div>
-          <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
-          <div style="font-size:9px;font-weight:600;color:${textColor}">${stepsCount.toLocaleString()} steps</div>
-        </div>`,
-      className: '', iconAnchor: [0, 0]
+  // ONE label only — at the largest polygon fragment, avoids name repeating for MultiPolygon
+  let largestPath = paths[0];
+  if (paths.length > 1) {
+    let largestArea = 0;
+    paths.forEach(path => {
+      try {
+        const coords = path.map(c => [c[1], c[0]]);
+        coords.push(coords[0]);
+        const a = turf.area(turf.polygon([coords]));
+        if (a > largestArea) { largestArea = a; largestPath = path; }
+      } catch(e) {}
     });
-    return L.marker(center, { icon: labelIcon, interactive: false });
+  }
+  const labelCenter = L.polygon(largestPath).getBounds().getCenter();
+  const singleLabelIcon = L.divIcon({
+    html: `<div style="pointer-events:none;text-align:center;line-height:1.6;white-space:nowrap;transform:translate(-50%, -50%);text-shadow: 0 0 8px ${entry.color}, 0 0 2px rgba(0,0,0,0.9);">
+        <div style="font-size:12px;font-weight:900;color:${textColor};letter-spacing:0.3px">${entry.name}${entry.zoneName ? ' · <span style=\'font-size:9px;font-weight:500\'>' + entry.zoneName + '</span>' : ''}</div>
+        <div style="font-size:10px;font-weight:700;color:${textColor}">${areaLabel}</div>
+        <div style="font-size:9px;font-weight:600;color:${textColor}">${stepsCount.toLocaleString()} steps</div>
+      </div>`,
+    className: '', iconAnchor: [0, 0]
   });
+  const singleLabel = L.marker(labelCenter, { icon: singleLabelIcon, interactive: false });
 
-  entry.layer = L.layerGroup([...polyLayers, ...labelMarkers]).addTo(map);
+  entry.layer = L.layerGroup([...polyLayers, singleLabel]).addTo(map);
 }
 
 // ===== CLOSE TERRITORY =====
